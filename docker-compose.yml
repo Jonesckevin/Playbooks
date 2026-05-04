@@ -1,0 +1,17 @@
+services:
+  soc-playbooks:
+    build: .
+    image: soc-playbooks:latest
+    container_name: soc-playbooks
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    volumes:
+      - playbook-data:/playbooks
+    labels:
+      - "com.soc.description=SOC IR Playbook Library"
+      - "com.soc.version=2.0"
+
+volumes:
+  playbook-data:
+    driver: local
