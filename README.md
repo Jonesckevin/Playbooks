@@ -32,12 +32,15 @@ on a named Docker volume at `/playbooks` inside the container.
 soc-playbooks/
 ├── Dockerfile
 ├── docker-compose.yml
-├── index.html              ← full SPA (36 playbooks, 122 Splunk queries)
-├── cgi-bin/
-│   ├── save_playbook.sh    ← POST: writes /playbooks/<id>.json
-│   ├── load_playbooks.sh   ← GET:  returns all playbooks as JSON array
-│   └── delete_playbook.sh  ← POST: removes /playbooks/<id>.json
-└── README.md
+├── README.md
+└── app/
+    ├── index.html          ← SPA shell (structure + external refs)
+    ├── style.css           ← all styles
+    ├── app.js              ← all JavaScript (library data + UI logic)
+    └── cgi-bin/
+        ├── save_playbook.sh    ← POST: writes /playbooks/<id>.json
+        ├── load_playbooks.sh   ← GET:  returns all playbooks as JSON array
+        └── delete_playbook.sh  ← POST: removes /playbooks/<id>.json
 ```
 
 ## Quick start

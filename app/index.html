@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOC IR Playbook Library</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+
+<div class="sidebar">
+  <div class="sb-head">
+    <div class="sb-title">SOC Playbook Library</div>
+    <div class="sb-sub">Splunk &middot; Network logs &middot; v2.0</div>
+  </div>
+  <div class="sb-search">
+    <input type="text" id="sb-search" placeholder="Search playbooks..." oninput="searchNav(this.value)">
+  </div>
+  <div class="sb-nav" id="sb-nav">
+    <div class="sb-group-label" onclick="toggleGroup('g-overview')">Overview <span id="g-overview-arr">▾</span></div>
+    <div class="nav-group" id="g-overview">
+      <div class="nav-item active" id="nav-home" onclick="showPanel('home',this)">All playbooks</div>
+      <div class="nav-item" id="nav-base" onclick="showPanel('base',this)">Base alert procedure</div>
+      <div class="nav-item" id="nav-create" onclick="showPanel('create',this)"><span class="dot d-custom"></span>Create playbook</div>
+    </div>
+    <div id="dyn-nav"></div>
+  </div>
+</div>
+
+<div class="main" id="main-content">
+
+<!-- HOME -->
+<div class="panel visible" id="panel-home">
+  <div class="ph">
+    <div class="ph-ey">SOC Incident Response</div>
+    <div class="ph-ti">Playbook Library</div>
+    <div class="ph-su">Splunk SIEM &middot; Network &amp; traffic logs &middot; MITRE ATT&amp;CK mapped</div>
+    <div class="ph-me">
+      <span class="badge b-gray" id="pb-count-badge">0 playbooks</span>
+      <span class="badge b-blue">Splunk</span>
+      <span class="badge b-amber">Network logs</span>
+      <span class="badge b-teal">MITRE mapped</span>
+    </div>
+  </div>
+  <div class="filter-bar">
+    <span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Filter:</span>
+    <button class="filter-btn on" onclick="filterCards('all',this)">All</button>
+    <button class="filter-btn" onclick="filterCards('Malware',this)">Malware</button>
+    <button class="filter-btn" onclick="filterCards('Cloud',this)">Cloud</button>
+    <button class="filter-btn" onclick="filterCards('Identity',this)">Identity</button>
+    <button class="filter-btn" onclick="filterCards('Insider Threat',this)">Insider</button>
+    <button class="filter-btn" onclick="filterCards('Application',this)">Application</button>
+    <button class="filter-btn" onclick="filterCards('Supply Chain',this)">Supply Chain</button>
+    <button class="filter-btn" onclick="filterCards('Data',this)">Data</button>
+    <button class="filter-btn" onclick="filterCards('Network',this)">Network</button>
+    <button class="filter-btn" onclick="filterCards('Custom',this)">Custom</button>
+  </div>
+  <div class="cards" id="cards-grid"></div>
+</div>
+
+<!-- BASE -->
+<div class="panel" id="panel-base">
+  <div class="pb-ey">Base procedure — all alerts</div>
+  <div class="pb-ti">Alert intake, triage &amp; documentation</div>
+  <div class="pb-me"><span class="badge b-gray">Universal</span><span class="badge b-blue">Splunk</span></div>
+  <div class="phases">
+    <div class="ph-box ph-1"><span>1</span>Intake</div>
+    <div class="ph-box ph-2"><span>2</span>Triage</div>
+    <div class="ph-box ph-3"><span>3</span>Decision</div>
+    <div class="ph-box ph-5"><span>4</span>Document</div>
+  </div>
+  <div class="sec"><div class="sec-label">Phase 1 — Alert intake</div><div class="steps">
+    <div class="step"><div class="step-n">1</div><div><div class="step-t">Open and read the alert in full</div><div class="step-d">Record: alert name, rule/correlation ID, time fired, severity, triggering src/dest IP, port, protocol, and user context. Do not dismiss before triage is complete.</div></div></div>
+    <div class="step"><div class="step-n">2</div><div><div class="step-t">Pull underlying raw events in Splunk</div><div class="step-d">Navigate to the notable event. Always read raw log lines — never rely on the summary field alone.<br><code style="font-size:11px;font-family:var(--mono);background:var(--bg2);padding:4px 7px;border-radius:4px;display:block;margin-top:6px;color:var(--blue-t);word-break:break-all">index=network earliest=-30m | search [correlation_filter] | table _time, src_ip, dest_ip, dest_port, action, bytes, protocol</code></div></div></div>
+    <div class="step"><div class="step-n">3</div><div><div class="step-t">Classify the asset and traffic direction</div><div class="step-d">Internal / external / known-bad. Asset role: user device, server, gateway, network device. Direction: inbound / outbound / lateral.</div></div></div>
+  </div></div>
+  <div class="sec"><div class="sec-label">Phase 2 — Triage checklist</div>
+  <div class="tbl-wrap"><table class="g"><thead><tr><th>Check</th><th>Action</th><th>Source</th></tr></thead><tbody>
+    <tr><td>False positive?</td><td>Compare against baselines; check tuning notes on this rule</td><td><span class="badge b-blue">Splunk</span></td></tr>
+    <tr><td>Threat intel</td><td>Look up all IPs, domains, hashes against IOC feeds</td><td><span class="badge b-gray">TI / OSINT</span></td></tr>
+    <tr><td>Scope</td><td>Single host or multiple? Search the indicator across all sources</td><td><span class="badge b-blue">Splunk</span></td></tr>
+    <tr><td>Volume / frequency</td><td>One-off event or sustained pattern? Pull counts over 24h and 7d</td><td><span class="badge b-blue">Splunk</span></td></tr>
+    <tr><td>Historical context</td><td>Has this src/dest been seen before? Were prior alerts actioned?</td><td><span class="badge b-blue">Splunk</span></td></tr>
+    <tr><td>Business context</td><td>Expected given time of day, user role, or system function?</td><td><span class="badge b-gray">CMDB / comms</span></td></tr>
+  </tbody></table></div></div>
+  <div class="sec"><div class="sec-label">Phase 3 — Decision &amp; escalation</div>
+  <div class="tbl-wrap"><table class="g"><thead><tr><th>Verdict</th><th>Action</th><th>Priority</th></tr></thead><tbody>
+    <tr><td><span class="badge b-gray">False positive</span></td><td>Close with notes; flag rule for tuning</td><td style="color:var(--text2)">Informational</td></tr>
+    <tr><td><span class="badge b-teal">Benign positive</span></td><td>Close with justification; consider suppression</td><td style="color:var(--text2)">Low</td></tr>
+    <tr><td><span class="badge b-amber">Suspicious</span></td><td>Escalate to T2 with findings summary; open ticket; continue monitoring</td><td style="color:var(--amber-t);font-weight:600">Medium</td></tr>
+    <tr><td><span class="badge b-red">Confirmed true positive</span></td><td>Immediate escalation; consider containment; notify TL; preserve evidence</td><td style="color:var(--red-t);font-weight:600">High / P1</td></tr>
+  </tbody></table></div></div>
+  <div class="sec"><div class="sec-label">Phase 4 — Documentation</div><div class="steps">
+    <div class="step"><div class="step-n">A</div><div><div class="step-t">Log all investigative actions with timestamps</div><div class="step-d">Every Splunk query, every source consulted, every person contacted, every decision made. The ticket must stand alone as the complete record.</div></div></div>
+    <div class="step"><div class="step-n">B</div><div><div class="step-t">Capture and attach evidence</div><div class="step-d">Export relevant Splunk log snippets. Record all IPs, domains, accounts, ports, timestamps, and data volumes involved.</div></div></div>
+    <div class="step"><div class="step-n">C</div><div><div class="step-t">Record verdict and close formally</div><div class="step-d">Mark verdict type. If escalating, include a concise findings summary for the next tier. Tag the rule for FP/TP tracking.</div></div></div>
+  </div></div>
+</div>
+
+<!-- PLAYBOOK DETAIL (dynamic) -->
+<div class="panel" id="panel-detail">
+  <div id="detail-content"></div>
+</div>
+
+<!-- CREATE -->
+<div class="panel" id="panel-create">
+  <div class="pb-ey">Analyst tool</div>
+  <div class="pb-ti">Create a playbook</div>
+  <div class="pb-me"><span class="badge b-purple">Custom</span></div>
+  <div class="success-banner" id="create-success">Playbook saved successfully and added to the library.</div>
+  <div class="form-grid">
+    <div class="form-group form-full">
+      <label class="form-label">Playbook title <span>*</span></label>
+      <input class="form-input" id="f-name" placeholder="e.g. Suspicious PowerShell Execution" maxlength="80">
+    </div>
+    <div class="form-group form-full">
+      <label class="form-label">Scenario description <span>*</span></label>
+      <textarea class="form-textarea" id="f-scenario" placeholder="Describe the alert scenario and what has been detected..." rows="3"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Incident type / category <span>*</span></label>
+      <select class="form-select" id="f-cat">
+        <option value="">Select category...</option>
+        <option>Malware</option>
+        <option>Insider Threat</option>
+        <option>Cloud</option>
+        <option>Identity</option>
+        <option>Application</option>
+        <option>Network</option>
+        <option>Supply Chain</option>
+        <option>Data</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Severity</label>
+      <select class="form-select" id="f-sev">
+        <option value="critical">Critical</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+    </div>
+    <div class="form-group form-full">
+      <label class="form-label">Detection sources (Splunk sourcetypes / tools)</label>
+      <input class="form-input" id="f-detection" placeholder="e.g. sourcetype=firewall, sourcetype=dns, EDR alerts">
+    </div>
+    <div class="form-group form-full">
+      <label class="form-label">MITRE ATT&amp;CK technique IDs</label>
+      <div id="mitre-tags-container">
+        <div class="mitre-input-row">
+          <input class="mitre-tag-input" placeholder="T1059.001" maxlength="20">
+          <button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="addMitreTag()">+ Add</button>
+        </div>
+      </div>
+      <div id="mitre-tags-display" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px"></div>
+    </div>
+    <div class="form-group form-full">
+      <label class="form-label">Splunk investigation query</label>
+      <textarea class="form-textarea" id="f-splunk" placeholder="index=network sourcetype=... | stats count by src_ip, dest_ip | ..." rows="3" style="font-family:var(--mono);font-size:12px"></textarea>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="sec-label" style="margin-bottom:12px">Investigation steps</div>
+  <div id="det-builder" class="step-builder" style="margin-bottom:1rem">
+    <div class="step-builder-head">Detection &amp; analysis <button class="btn btn-secondary" style="padding:3px 9px;font-size:11px" onclick="addStep('det-steps')">+ Step</button></div>
+    <div class="step-builder-body" id="det-steps"></div>
+    <div class="add-step-btn" onclick="addStep('det-steps')">+ Add detection step</div>
+  </div>
+  <div class="step-builder" style="margin-bottom:1rem">
+    <div class="step-builder-head">Containment <button class="btn btn-secondary" style="padding:3px 9px;font-size:11px" onclick="addStep('cont-steps')">+ Step</button></div>
+    <div class="step-builder-body" id="cont-steps"></div>
+    <div class="add-step-btn" onclick="addStep('cont-steps')">+ Add containment step</div>
+  </div>
+  <div class="step-builder" style="margin-bottom:1rem">
+    <div class="step-builder-head">Eradication <button class="btn btn-secondary" style="padding:3px 9px;font-size:11px" onclick="addStep('erad-steps')">+ Step</button></div>
+    <div class="step-builder-body" id="erad-steps"></div>
+    <div class="add-step-btn" onclick="addStep('erad-steps')">+ Add eradication step</div>
+  </div>
+  <div class="step-builder" style="margin-bottom:1rem">
+    <div class="step-builder-head">Recovery &amp; lessons learned <button class="btn btn-secondary" style="padding:3px 9px;font-size:11px" onclick="addStep('rec-steps')">+ Step</button></div>
+    <div class="step-builder-body" id="rec-steps"></div>
+    <div class="add-step-btn" onclick="addStep('rec-steps')">+ Add recovery step</div>
+  </div>
+
+  <div class="form-actions">
+    <button class="btn btn-primary" onclick="savePlaybook()">Save playbook</button>
+    <button class="btn btn-secondary" onclick="resetForm()">Clear form</button>
+  </div>
+</div>
+
+</div><!-- /main -->
+</div><!-- /layout -->
+
+<script src="app.js"></script>
+</body>
+</html>

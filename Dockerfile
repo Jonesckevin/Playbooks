@@ -26,10 +26,12 @@ RUN rm -rf /var/www/localhost/htdocs/* && \
     ln -sf /proc/self/fd/2 /var/log/apache2/error.log
 
 # ── Copy app ──────────────────────────────────────────────────────────────
-COPY index.html                 /var/www/localhost/htdocs/index.html
-COPY cgi-bin/save_playbook.sh   /var/www/localhost/cgi-bin/save_playbook.sh
-COPY cgi-bin/load_playbooks.sh  /var/www/localhost/cgi-bin/load_playbooks.sh
-COPY cgi-bin/delete_playbook.sh /var/www/localhost/cgi-bin/delete_playbook.sh
+COPY app/index.html                 /var/www/localhost/htdocs/index.html
+COPY app/style.css                  /var/www/localhost/htdocs/style.css
+COPY app/app.js                     /var/www/localhost/htdocs/app.js
+COPY app/cgi-bin/save_playbook.sh   /var/www/localhost/cgi-bin/save_playbook.sh
+COPY app/cgi-bin/load_playbooks.sh  /var/www/localhost/cgi-bin/load_playbooks.sh
+COPY app/cgi-bin/delete_playbook.sh /var/www/localhost/cgi-bin/delete_playbook.sh
 
 RUN chmod +x /var/www/localhost/cgi-bin/*.sh
 
