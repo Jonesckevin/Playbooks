@@ -1,0 +1,190 @@
+{
+  "id": "pb12",
+  "num": 12,
+  "name": "Unauthorised Internal Database Access",
+  "fullName": "Unauthorised Internal Database Access",
+  "type": "Access Control Violation – Data Access Abuse",
+  "severity": "High (especially if PII, financial data or intellectual property is involved)",
+  "priority": "Critical",
+  "detection": "SIEM, Database Activity Monitoring (DAM), User Behaviour Analytics",
+  "scenario": "An insider or compromised system accesses database resources in an unauthorised manner, such as bypassing access controls, querying sensitive tables or using privileged database accounts inappropriately. This may include data snooping, unauthorised exports or lateral movement toward database servers.",
+  "mitre": "T1071.001, T1213.003, T1078",
+  "tools": "SIEM (e.g., Splunk, Sentinel, QRadar); Database Activity Monitoring (e.g., Imperva, IBM Guardium, AWS RDS Logs); User Behaviour Analytics (e.g., Exabeam, Securonix); EDR (if endpoint is involved); Application logs (e.g., from middleware or APIs calling the database); DLP and network proxy (to detect",
+  "sev": "critical",
+  "cat": "Data",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Review the DAM or SIEM alert for the specific query pattern",
+      "detail": "Check what SQL queries were run, which tables were accessed, what volumes of data were returned, and whether the access time was unusual (outside business hours, high query volume). Determine if the user has legitimate access to those tables.",
+      "queries": {
+        "splunk": "index=database sourcetype=db_audit user=[suspect_user] | stats count by query_type, table_name, rows_returned | sort -rows_returned",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Correlate database access with endpoint and network activity",
+      "detail": "Determine if the database access followed a network compromise or lateral movement event. Look for the database being accessed from a host it has not historically been accessed from, which indicates the attacker pivoted to reach it.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall dest_port IN (1433,3306,5432,1521,27017) | stats dc(src_ip) as sources by dest_ip | sort -sources",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Revoke database access for the offending account or connection",
+      "detail": "Disable or suspend the specific database user account that was abused. If access came from a compromised application service account, rotate the credentials immediately and audit what else the service account has access to.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Block outbound data transfer from the database server",
+      "detail": "Apply firewall rules to restrict outbound connections from the database server to only approved destinations. Check for any active bulk data export in progress and terminate it.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall src_ip=[db_server_ip] NOT dest_ip IN (\"10.*\",\"172.16.*\",\"192.168.*\") | stats count by dest_ip, dest_port | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Reset credentials or tokens: For database accounts that were abused",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Remove rogue users or permissions: Audit database for hidden users, triggers or escalated privileges",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Patch vulnerabilities: If a flaw in application or database was exploited",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Clean up logs: Archive and secure logs for forensic investigation before removal or trimming",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Restore legitimate access: After proper revalidation of user roles",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor for repeat access: Apply enhanced monitoring for the same user or host",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Perform integrity check: Validate that no data was altered or corrupted during the incident",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Resume services: Resume application or database operations once secure and validated",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<5 minutes from unauthorised access"
+    },
+    {
+      "name": "Containment Time",
+      "target": "<30 minutes from confirmation"
+    },
+    {
+      "name": "Forensic Review Completion",
+      "target": "Within 48 hours"
+    },
+    {
+      "name": "Role/Permission Audit Completion",
+      "target": "Within 7 days"
+    },
+    {
+      "name": "Policy Update and Revalidation",
+      "target": "Within 2 weeks"
+    }
+  ]
+}

@@ -1,0 +1,190 @@
+{
+  "id": "pb21",
+  "num": 21,
+  "name": "Cloud Identity Misconfiguration",
+  "fullName": "Cloud Identity Misconfiguration",
+  "type": "Misconfiguration – IAM / Access Policy",
+  "severity": "High to Critical (especially if privileged access or sensitive data is",
+  "priority": "exposed)",
+  "detection": "Critical",
+  "scenario": "A misconfigured cloud identity or access control (e.g., overly permissive IAM role, wildcard access policy, unintended trust relationships) is exploited by an internal or external actor to gain elevated access, move laterally or access restricted resources.",
+  "mitre": "T1078.004, T1098.001, T1550.001",
+  "tools": "CSPM tools (e.g., Wiz, Prisma Cloud, Microsoft Defender for Cloud, AWS Config); SIEM (e.g., Splunk, Sentinel, QRadar); Cloud audit logs (e.g., AWS CloudTrail, Azure Activity Logs, GCP Audit Logs); IAM policy scanners (e.g., PMapper, CloudSploit, IAM Access Analyzer); SOAR for automated remediation; ",
+  "sev": "critical",
+  "cat": "Other",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Validate the CSPM or SIEM alert for the specific IAM misconfiguration",
+      "detail": "Confirm what the misconfiguration is: wildcard (*) action in a policy, trust relationship allowing any principal, missing condition keys, overly broad role assumption, or unintended cross-account access. Determine if any external party has discovered and used the misconfiguration.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=cloudtrail eventName=AssumeRole | stats count by userIdentity.arn, roleArn, src_ip | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Review access logs for evidence of exploitation",
+      "detail": "Check if any external or unexpected principals have used the misconfigured role or policy during the exposure window. Even if no exploitation is evident, treat the misconfiguration as a breach until confirmed otherwise.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=cloudtrail errorCode=\"\" | stats count by userIdentity.type, userIdentity.arn, eventName | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Immediately remove or correct the misconfigured policy",
+      "detail": "Apply the principle of least privilege — scope the policy to specific resources, actions, and conditions. Remove wildcard principals. Add condition keys (MFA required, source IP, time of day) to high-risk permissions.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Rotate credentials for any identities that used the misconfigured access",
+      "detail": "If external principals exploited the misconfiguration, rotate all credentials (access keys, passwords, tokens) for the affected resources. This includes any service accounts or application credentials that may have been accessible.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remediate IAM policy: Apply corrected policies with scoped permissions, conditions and role boundaries",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Rotate affected credentials: Especially for users, service accounts or cloud-native secrets",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Validate trust relationships: Reconfigure role assumptions and remove unintended crossaccount trust",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Remove unused roles/groups: Decommission identities that serve no operational need",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Restore proper access: Re-assign necessary permissions using least privilege principles",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor reconfiguration: Set temporary alerts on updated identities for post-fix behaviour validation",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Re-enable services: After confirming configurations are secure and audit logs show no further misuse",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Communicate status: Provide updates to security, DevOps and cloud platform owners",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<10 minutes for risky IAM change"
+    },
+    {
+      "name": "Containment Time",
+      "target": "<30 minutes from alert confirmation"
+    },
+    {
+      "name": "Policy Fix Completion",
+      "target": "<4 hours for critical misconfiguration"
+    },
+    {
+      "name": "Credential Rotation Time",
+      "target": "<2 hours for affected identities"
+    },
+    {
+      "name": "Access Review Coverage",
+      "target": "100% of affected identities audited post-incident"
+    }
+  ]
+}

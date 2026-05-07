@@ -1,0 +1,198 @@
+{
+  "id": "pb03",
+  "num": 3,
+  "name": "Cloud Account Compromise",
+  "fullName": "Cloud Account Compromise",
+  "type": "Identity Compromise – Cloud Account",
+  "severity": "High (especially if privileged account is involved)",
+  "priority": "Critical if lateral movement or data access is observed",
+  "detection": "SIEM, CASB, Cloud-native logging (e.g., AWS CloudTrail, Azure AD),",
+  "scenario": "An attacker gains unauthorized access to a user's cloud account, possibly through phishing, password spraying, token theft or OAuth abuse. The attacker may access email, storage, admin functions or cloud infrastructure.",
+  "mitre": "T1078, T1087.004, T1556.004, T1531",
+  "tools": "SIEM (e.g., Microsoft Sentinel, Splunk, QRadar); Cloud-native logs (e.g., AWS CloudTrail, Azure Log Analytics, Google Workspace; audit logs); CASB (e.g., Netskope, Microsoft Defender for Cloud Apps); Cloud Security Posture Management (e.g., Wiz, Prisma Cloud); EDR/XDR with identity correlation (e.g.",
+  "sev": "critical",
+  "cat": "Cloud",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Detect login anomalies in cloud audit logs",
+      "detail": "Look for failed logins, impossible travel (same account logging in from two distant geolocations within minutes), MFA bypass attempts, or first-time logins from unknown IPs. Correlate with SIEM alerts from CASB or cloud-native logging.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=azure_ad OR sourcetype=gws_admin | search action=failed_login OR action=mfa_bypass | stats count by user, src_ip, location | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Correlate source IPs with threat intelligence",
+      "detail": "Match the attacker's IP against known threat feeds, TOR exit node lists, VPN/proxy infrastructure, and residential proxy ranges. A login from a known-bad IP is a strong indicator of credential theft rather than legitimate access.",
+      "queries": {
+        "splunk": "index=cloud src_ip=[suspicious_ip] | stats count by user, action, src_ip | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Review post-login cloud activity",
+      "detail": "Check what the account accessed after the suspicious login: mailbox access, file downloads, IAM changes, admin panel access, or API calls. Look for auto-forwarding rules, new OAuth grants, or new admin account creation.",
+      "queries": {
+        "splunk": "index=cloud user=[suspect_user] earliest=[login_time] | stats count by action, resource | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Look for privilege escalation or backdoor creation",
+      "detail": "Attackers who compromise cloud accounts often attempt to escalate or establish persistence by creating backdoor accounts, granting themselves admin roles, or adding OAuth apps with broad permissions.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=azure_ad EventCode IN (4720,4728,4732) | table _time, user, target_user, action | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
+        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Revoke all active sessions and OAuth tokens",
+      "detail": "Immediately invalidate all active sessions, access tokens, and refresh tokens for the compromised account via the identity platform admin console. This terminates the attacker's current access even if they hold a valid token.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Force password reset and enforce MFA",
+      "detail": "Reset the account password through an admin-initiated flow (not email reset link — attacker may control the mailbox). Enforce MFA enrolment at next login. If MFA was already present, check for SIM-swap or authenticator app bypass.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Block attacker IPs at the identity provider",
+      "detail": "Apply conditional access or named location blocks for the attacker's IP ranges in Azure AD / Okta / Google Workspace. For TOR exit nodes, apply a blanket TOR block policy if not already in place.",
+      "queries": {
+        "splunk": "index=cloud src_ip=[attacker_ip] | stats count by user, action | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Suspend the account if impact is confirmed high",
+      "detail": "If lateral movement, data access, or admin action was confirmed during the session, suspend the account entirely pending full investigation rather than just resetting credentials.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove malicious inbox rules and auto-forwards",
+      "detail": "Check for auto-forwarding rules, inbox filters (mark-as-read and delete), calendar sharing changes, or out-of-office replies configured by the attacker. In M365: Get-InboxRule; in Google Workspace: check Filters and Forwarding.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Revoke rogue OAuth application grants",
+      "detail": "Review all third-party app OAuth consents for the compromised account. Revoke any apps not recognised or approved by IT. Check for apps with read_mail, read_drive, or send_as permissions.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Revert any admin role or permission changes",
+      "detail": "Audit all IAM/RBAC changes made during the attacker's session window. Remove any accounts added to admin groups, any new service principals created, and any permission grants made.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=azure_ad action=RoleAssignment | stats count by user, target_user, role | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Re-enable access after confirming no persistence",
+      "detail": "Before re-enabling the account, confirm: all sessions revoked, inbox rules cleaned, rogue apps removed, admin roles reverted, and MFA enforced. Use a security checklist — do not re-enable based on a verbal confirmation alone.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor the account for 14–30 days post-recovery",
+      "detail": "Set enhanced alerting on the recovered account for any login from a new location, new device, or outside business hours. Use CASB or SIEM to flag any new OAuth grants or admin actions.",
+      "queries": {
+        "splunk": "index=cloud user=[recovered_user] | stats count by action, src_ip, location | timechart count span=1d",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<15 minutes from suspicious login"
+    },
+    {
+      "name": "Response Time",
+      "target": "<1 hour to lock and reset credentials"
+    },
+    {
+      "name": "Containment Time",
+      "target": "<30 minutes after confirmation"
+    },
+    {
+      "name": "Post-incident Monitoring Period",
+      "target": "7–14 days minimum"
+    }
+  ]
+}

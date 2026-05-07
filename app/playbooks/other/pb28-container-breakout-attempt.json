@@ -1,0 +1,182 @@
+{
+  "id": "pb28",
+  "num": 28,
+  "name": "Container Breakout Attempt",
+  "fullName": "Container Breakout Attempt",
+  "type": "Container Runtime Security – Escape Attempt",
+  "severity": "Critical (especially if host access or privilege escalation is achieved)",
+  "priority": "Critical",
+  "detection": "Runtime Security Tools, SIEM, EDR, Kubernetes Audit Logs, Falco",
+  "scenario": "An attacker gains access to a container and attempts to escape the isolated environment to interact with the host operating system, escalate privileges or compromise other containers, pods or underlying infrastructure.",
+  "mitre": "T1611, T1059, T1203",
+  "tools": "Runtime Security (e.g., Falco, Sysdig Secure, Aqua, Prisma Cloud Compute, Wiz); Kubernetes Audit Logs and RBAC logs; SIEM (e.g., Sentinel, Splunk, QRadar); EDR (for host nodes, e.g., CrowdStrike, Cortex XDR); NDR (for container traffic visibility); Image Scanning (e.g., Trivy, Clair, Anchore)",
+  "sev": "critical",
+  "cat": "Other",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Detect breakout attempt indicators in container runtime logs",
+      "detail": "Look for attempts to access the host filesystem (/proc/1, /host, /root from within a container), privilege escalation using nsenter or chroot, mounting the Docker socket, or execution of unexpected privileged binaries. Runtime security tools like Falco fire on these patterns.",
+      "queries": {
+        "splunk": "index=container sourcetype=falco rule IN (\"Container Drift Detected\",\"Write below root\",\"Mkdir binary dirs\") | table _time, container_id, rule, cmdline | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Identify the affected container, image, and node",
+      "detail": "Determine which specific container triggered the alert, what image it is running, which Kubernetes node it is on, and what service it belongs to. This determines the blast radius — a compromise of a pod with cluster-admin rights is far more severe.",
+      "queries": {
+        "splunk": "index=container sourcetype=k8s_audit verb IN (exec,create) namespace=[suspect_namespace] | table _time, user, resource, verb, response_status | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Immediately terminate the compromised pod or container",
+      "detail": "Forcefully delete or stop the compromised container/pod to halt the breakout attempt. Remove the node from cluster scheduling (kubectl cordon) to prevent new workloads being scheduled while investigation continues.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Preserve node memory and logs before remediation",
+      "detail": "If forensics are required, capture the node's memory state and container runtime logs before terminating or draining the node. Once the node is remediated, this evidence is lost.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Investigate the root cause: Vulnerable image, over-permissive configuration or exposed interface",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Patch vulnerable workloads: Rebuild and redeploy affected pods with fixed configuration or image",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Rotate secrets and credentials: Especially if stored in environment variables, configMaps or volumes",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Remove backdoors or malicious tools: Search for rogue binaries, cron jobs or injected scripts in containers or host",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Rebuild workloads from trusted images",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Reinstate node after sanitisation",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Enhance monitoring for affected namespace or deployment",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<5 minutes from breakout attempt"
+    },
+    {
+      "name": "Pod Termination Time",
+      "target": "<10 minutes from alert"
+    },
+    {
+      "name": "Root Cause Fix Time",
+      "target": "<48 hours"
+    },
+    {
+      "name": "Node Revalidation",
+      "target": "Within 24 hours post-removal"
+    },
+    {
+      "name": "Completion",
+      "target": "100% of similar deployments audited within 3 business"
+    },
+    {
+      "name": "Image Hardening Review",
+      "target": "days"
+    }
+  ]
+}

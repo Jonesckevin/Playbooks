@@ -1,0 +1,178 @@
+{
+  "id": "pb05",
+  "num": 5,
+  "name": "Supply Chain Attack",
+  "fullName": "Supply Chain Attack",
+  "type": "Supply Chain Compromise",
+  "severity": "Critical (due to indirect trust exploitation)",
+  "priority": "Critical",
+  "detection": "Threat intelligence, SIEM, EDR, vulnerability reports, system",
+  "scenario": "An organisation is compromised through a trusted third-party service, software update, library, plugin or IT service provider. The attacker uses the trusted relationship to move laterally, deploy malware or exfiltrate data.",
+  "mitre": "T1195.002, T1195.001, T1105",
+  "tools": "SIEM (e.g., Splunk, Sentinel, QRadar); EDR/XDR (e.g., CrowdStrike, Cortex XDR); Threat intelligence platforms (e.g., MISP, Recorded Future); Software integrity validation (e.g., sigcheck, file hashing tools); Configuration management tools (e.g., SCCM, Ansible, JAMF)",
+  "sev": "critical",
+  "cat": "Supply Chain",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Identify abnormal behaviour from trusted software or vendor connections",
+      "detail": "Look for outbound connections, registry changes, dropped files, or execution from unexpected paths triggered by known-good software (e.g., monitoring agent, backup client, IT management tool). Supply chain attacks abuse the trust placed in these tools.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall action=allow NOT dest_ip IN (\"10.*\",\"172.16.*\",\"192.168.*\") | stats count by src_ip, dest_ip, dest_port | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Verify against threat intelligence and public disclosures",
+      "detail": "Check if any recently updated third-party software has been listed in threat intel feeds or vendor security advisories. Cross-reference affected component versions against CVE databases and known breach notifications (SolarWinds, MOVEit, 3CX, Kaseya).",
+      "queries": {
+        "splunk": "index=network sourcetype=dns | stats count by query | sort -count | head 50",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Examine affected components and recent changes",
+      "detail": "Determine if the suspicious behaviour correlated with a recent software update, new third-party integration, or vendor remote access session. Check change management records for the timeframe.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall | stats dc(dest_ip) as unique_dests by src_ip | where unique_dests > 20 | sort -unique_dests",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Disconnect affected systems and suspend vendor integrations",
+      "detail": "Immediately prevent lateral movement and external communication from affected hosts. Suspend all API connections, remote access sessions, and integrations with the affected third-party vendor until the scope is determined.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Block malicious binaries and indicator-matched network traffic",
+      "detail": "Use EDR to block execution of known-malicious file hashes. Apply firewall rules to block outbound connections to attacker infrastructure identified in threat intel. Block the specific software version at the network level if it cannot be immediately removed.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall dest_ip IN ([attacker_ips]) | stats count by src_ip, dest_ip | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Quarantine all hosts that received the compromised update",
+      "detail": "Identify every host in the environment running the affected software version and quarantine them from the network. The attacker may have lateral movement or persistence established on all of them.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall src_ip IN ([affected_hosts]) NOT dest_ip IN (\"10.*\",\"172.16.*\",\"192.168.*\") | stats count by dest_ip, dest_port",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove malicious files and roll back the compromised update",
+      "detail": "Uninstall the affected software version or roll back to the last known-good version. Remove any files, scripts, scheduled tasks, or registry keys created by the attacker through the compromised component.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Validate software integrity before reinstatement",
+      "detail": "Use cryptographic hash comparison against the vendor's published checksums to confirm software integrity before reinstalling. For critical components, prefer re-imaging from a validated baseline over in-place repair.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Update all detection rules with discovered IOCs",
+      "detail": "Add newly discovered IOCs (file hashes, C2 IPs/domains, registry keys, scheduled task names) to SIEM and EDR platforms immediately. Share with threat intel communities if the organisation's disclosure policy allows.",
+      "queries": {
+        "splunk": "index=network dest_ip IN ([new_ioc_ips]) | stats count by src_ip | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Reinstall from a validated clean source",
+      "detail": "Use verified installation media or a patched version confirmed clean by the vendor. Restore from a known-good backup only if the backup predates the compromise window confirmed in the investigation.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Re-establish vendor connection only after validation",
+      "detail": "Do not restore vendor remote access or API integrations until the vendor has provided a formal statement of their mitigation status and you have confirmed the patched version is clean.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Vendor Notification Response Time",
+      "target": "Within 24 hours of known vendor disclosure"
+    },
+    {
+      "name": "Compromise Detection Time",
+      "target": "<6 hours after initial signs"
+    },
+    {
+      "name": "Isolation & Containment Time",
+      "target": "<2 hours after confirmation"
+    },
+    {
+      "name": "Remediation Completion Time",
+      "target": "Within 48–72 hours for critical systems"
+    },
+    {
+      "name": "Third-Party Reassessment Completion",
+      "target": "Within 7 days of incident closure"
+    }
+  ]
+}

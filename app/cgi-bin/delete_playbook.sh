@@ -4,6 +4,7 @@
 # Removes the matching /playbooks/<uuid>.json file.
 
 PLAYBOOKS_DIR="/playbooks"
+OVERRIDE_DIR="${PLAYBOOKS_DIR}/library-overrides"
 
 echo "Content-Type: application/json"
 echo "Access-Control-Allow-Origin: *"
@@ -22,24 +23,36 @@ else
     ID=$(echo "$QUERY_STRING" | grep -o 'id=[^&]*' | sed 's/id=//')
 fi
 
-# Sanitise - only allow safe characters (timestamp-hex pattern)
-ID=$(echo "$ID" | tr -cd '0-9a-f-')
+# Sanitise - allow alphanumeric IDs used by both custom and library playbooks.
+ID=$(echo "$ID" | tr -cd 'a-zA-Z0-9._-')
 
 if [ -z "$ID" ]; then
     echo '{"error":"Missing id parameter"}'
     exit 0
 fi
 
-TARGET="${PLAYBOOKS_DIR}/${ID}.json"
+TARGET_CUSTOM="${PLAYBOOKS_DIR}/${ID}.json"
+TARGET_OVERRIDE="${OVERRIDE_DIR}/${ID}.json"
 
-if [ ! -f "$TARGET" ]; then
-    echo '{"error":"Playbook not found"}'
+if [ -f "$TARGET_CUSTOM" ]; then
+    rm "$TARGET_CUSTOM"
+    if [ $? -eq 0 ]; then
+        echo "{\"ok\":true,\"deleted\":\"${ID}\",\"source\":\"custom\"}"
+    else
+        echo '{"error":"Failed to delete custom playbook"}'
+    fi
     exit 0
 fi
 
-rm "$TARGET"
-if [ $? -eq 0 ]; then
-    echo "{\"ok\":true,\"deleted\":\"${ID}\"}"
-else
-    echo '{"error":"Failed to delete playbook"}'
+if [ -f "$TARGET_OVERRIDE" ]; then
+    rm "$TARGET_OVERRIDE"
+    if [ $? -eq 0 ]; then
+        echo "{\"ok\":true,\"deleted\":\"${ID}\",\"source\":\"library-override\",\"reverted\":true}"
+    else
+        echo '{"error":"Failed to remove library override"}'
+    fi
+    exit 0
 fi
+
+echo '{"error":"Playbook not found"}'
+exit 0

@@ -1,0 +1,214 @@
+{
+  "id": "pb15",
+  "num": 15,
+  "name": "Unauthorised Access to Development",
+  "fullName": "Unauthorised Access to Development",
+  "type": "Access Control Violation / Insider Threat",
+  "severity": "High (especially if source code or secrets are accessed or modified)",
+  "priority": "Critical",
+  "detection": "SIEM, Git logs, IAM, DevOps tools (e.g., Jenkins, GitLab), Audit trails,",
+  "scenario": "An individual gains access to a development environment (e.g., Git repositories, staging servers, CI/CD platforms like Jenkins or GitLab CI or test databases) without authorisation. This may result in code theft, insertion of malicious code or exposure of credentials and secrets.",
+  "mitre": "T1087.001, T1059, T1606, T1565.002",
+  "tools": "SIEM (e.g., Sentinel, Splunk); Git platforms (e.g., GitHub, GitLab, Bitbucket); CI/CD tools (e.g., Jenkins, GitLab CI, CircleCI, Azure DevOps); IAM & SSO (e.g., Okta, Azure AD, Google Workspace); Secret scanners (e.g., TruffleHog, Gitleaks); Container security tools (e.g., Aqua, Prisma Cloud)",
+  "sev": "critical",
+  "cat": "Insider Threat",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Identify the suspicious access event in Git and CI/CD logs",
+      "detail": "Look for repository access from unusual IPs, unexpected pipeline executions, new commit authors, or API token usage outside normal working hours. Git audit logs show exact files accessed, commits made, and actions performed.",
+      "queries": {
+        "splunk": "index=devops sourcetype=github OR sourcetype=gitlab action IN (push,clone,pull_request,token_use) | stats count by user, action, src_ip | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Determine the access method and what was touched",
+      "detail": "Identify whether access was via direct login, SSH key, API token, or OAuth integration. Determine which repositories, branches, pipeline configurations, and secrets were accessed or modified. Check if any commits were pushed that modified build scripts or configuration.",
+      "queries": {
+        "splunk": "index=devops sourcetype=github_audit user=[suspect_user] | stats count by action, repo, ref | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Revoke all access tokens and SSH keys used",
+      "detail": "Immediately disable the user account or token that was used for access. Revoke all SSH keys associated with the compromised account. If an OAuth integration was used, revoke the application grant.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Pause all CI/CD pipeline execution",
+      "detail": "Halt pipeline execution to prevent any malicious build scripts or injected code from reaching deployment. Review all recently triggered jobs for unexpected steps, external downloads, or secrets being printed to logs.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove unauthorised code or scripts: Revert malicious commits, rollback pipeline changes",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Rotate secrets and credentials: Especially if found in code, environment variables or configuration files",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Remove old users, service accounts or tokens",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Clean up compromised accounts",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Patch tool vulnerabilities",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Apply updates to exposed or misconfigured DevOps platforms",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Restore secure state: Confirm code and pipelines are clean, access is limited to authorised users",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Resume CI/CD operations: Only after validation of system integrity",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor codebase and build process: Set up enhanced logging and monitoring post-incident",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Revalidate audit controls: Ensure access logs, versioning and change tracking are enabled and working",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<10 minutes from unauthorised access"
+    },
+    {
+      "name": "Access Revocation Time",
+      "target": "<30 minutes from alert"
+    },
+    {
+      "name": "Secret Rotation Time",
+      "target": "<1 hour for high-value tokens or keys"
+    },
+    {
+      "name": "Codebase Validation Time",
+      "target": "<24 hours"
+    },
+    {
+      "name": "Post-Incident Audit Completion",
+      "target": "Within 3 business days"
+    }
+  ]
+}

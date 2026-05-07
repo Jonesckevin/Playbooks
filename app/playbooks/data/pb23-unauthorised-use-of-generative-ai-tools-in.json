@@ -1,0 +1,190 @@
+{
+  "id": "pb23",
+  "num": 23,
+  "name": "Unauthorised Use of Generative AI Tools in",
+  "fullName": "Unauthorised Use of Generative AI Tools in",
+  "type": "Policy Violation / Data Exposure Risk",
+  "severity": "Medium to Critical (depending on data sensitivity or automation",
+  "priority": "impact)",
+  "detection": "High",
+  "scenario": "An employee or system uses a generative AI tool in a production environment—either by pasting sensitive code, data or configuration into an AI prompt or by integrating an AI assistant into a live application—without formal approval or proper security evaluation.",
+  "mitre": "T1087.003, T1567.002, T1203",
+  "tools": "DLP (e.g., Microsoft Purview, Symantec, Forcepoint); CASB (e.g., Netskope, Microsoft Defender for Cloud Apps); SIEM (e.g., Splunk, Sentinel, QRadar); Endpoint Detection and Response (e.g., CrowdStrike, Cortex XDR); Proxy/Firewall Logs (e.g., Zscaler, Palo Alto, Fortinet); Browser control tools (e.g.",
+  "sev": "critical",
+  "cat": "Data",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Detect unapproved AI tool usage or data submission via proxy/CASB",
+      "detail": "Look for HTTP traffic to known AI endpoints (api.openai.com, claude.ai, bard.google.com, copilot.microsoft.com) that are not part of an approved integration. Check for large POST request bodies indicating prompt content or file uploads.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy dest_host IN (\"api.openai.com\",\"claude.ai\",\"*.anthropic.com\",\"bard.google.com\",\"api.mistral.ai\") | stats sum(bytes_out) as out by src_ip, dest_host | sort -out",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Identify what data was submitted to the AI service",
+      "detail": "Determine whether the data submitted included source code, customer PII, internal documentation, credentials, financial data, or other sensitive content. Check if this constitutes a data breach under applicable regulations.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy dest_host IN (\"api.openai.com\",\"*.anthropic.com\") method=POST | stats sum(bytes_out) as out, count by src_ip | sort -out",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Block the AI service endpoint at proxy and DNS level",
+      "detail": "Apply a proxy/firewall block for the specific AI service domain. For approved AI use cases, create a separate approved endpoint list and redirect other AI traffic to a CASB-monitored gateway.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove AI integration: From production services, scripts or pipelines if embedded",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Revoke any API tokens used: In unauthorised AI integrations (e.g., OpenAI API keys)",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Rotate exposed secrets: If credentials were pasted or stored by AI",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Clean up policy violations: Update configurations to remove AI-related exceptions or allowlists if misused",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Restore access under policy: Only after users acknowledge acceptable use terms or",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Validate codebase and production changes: AI plugins are audited and approved",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Implement AI governance checks: Ensure no unauthorised automation remains",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Resume operations: Introduce review workflows for AI-related tool usage and integrations",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Once security and compliance teams confirm risk is mitigated",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<10 minutes from data transfer or plugin use"
+    },
+    {
+      "name": "Containment Time",
+      "target": "<30 minutes for access revocation"
+    },
+    {
+      "name": "Risk Assessment Completion",
+      "target": "<24 hours from incident start"
+    },
+    {
+      "name": "Policy Re-acknowledgment Rate",
+      "target": "100% of involved users within 3 days"
+    },
+    {
+      "name": "Compliance Review Timeframe",
+      "target": "Within 7 days of incident resolution"
+    }
+  ]
+}

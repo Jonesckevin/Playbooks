@@ -1,0 +1,170 @@
+{
+  "id": "pb08",
+  "num": 8,
+  "name": "Business Email Compromise (BEC)",
+  "fullName": "Business Email Compromise (BEC)",
+  "type": "Social Engineering / Identity Compromise",
+  "severity": "High to Critical (due to financial and reputational risk)",
+  "priority": "Critical",
+  "detection": "Email gateway, SIEM, EDR, user report, cloud email audit logs",
+  "scenario": "An attacker gains access to or spoofs a legitimate business email account to deceive internal staff, customers or partners into making unauthorised wire transfers, sharing credentials or altering financial records. This may involve phishing, credential theft or abuse of trusted relationships.",
+  "mitre": "T1078, T1114, T1204, T1585.002",
+  "tools": "SIEM (e.g., Sentinel, Splunk, QRadar); Email security gateways (e.g., Proofpoint, Mimecast, Microsoft Defender for Office; Cloud audit logs (Microsoft 365 Unified Audit Log, Google Workspace Admin; Console); Identity platforms (e.g., Okta, Azure AD, Duo); Threat intel feeds for spoofed domain detect",
+  "sev": "critical",
+  "cat": "Identity",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Identify suspicious email account activity",
+      "detail": "Look for unusual login locations, new inbox rules created, unexpected email content sent from the account, or new OAuth app grants. Impossible travel (two logins from distant geographies within minutes) is a strong indicator of credential theft.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=o365 OR sourcetype=gws | search action IN (\"New-InboxRule\",\"Add-MailboxPermission\",\"Set-Mailbox\") | table _time, user, action, params | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Analyse email headers and sending infrastructure",
+      "detail": "Verify the sending domain, IP reputation, Reply-To address, and DKIM/DMARC/SPF results. Spoofed BEC emails often have a legitimate-looking From address but a different Reply-To, or originate from a domain with missing or failing authentication records.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Check for auto-forwarding rules and mailbox delegation",
+      "detail": "Attackers immediately set up auto-forwarding to an external address after gaining access, allowing persistent email monitoring even after the password is reset. Also check for mailbox delegation granting another account send-as rights.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=o365 Operation=New-InboxRule | table _time, user, ClientIPAddress, Parameters | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Determine if finance, HR, or executives were engaged",
+      "detail": "BEC's primary goal is financial fraud or credential harvesting. Determine if the compromised account sent emails requesting wire transfers, invoice changes, W-2/payroll data, or credential resets to finance, HR, or vendor contacts.",
+      "queries": {
+        "splunk": "index=email src_user=[compromised_user] dest_user IN ([finance_team],[hr_team]) | table _time, subject, attachment | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Reset credentials and revoke all active sessions",
+      "detail": "Force a password reset through an admin-initiated flow. Revoke all active sessions, tokens, and refresh tokens for the account. If attacker controls the recovery email, change that too. Notify the user via an out-of-band channel (phone).",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Remove all malicious inbox rules immediately",
+      "detail": "Delete any auto-forwarding rules, deletion filters, or read-and-mark rules created by the attacker. In M365 use: Get-InboxRule -Mailbox [user] | Remove-InboxRule. In Google Workspace: check Filters and Forwarding settings in admin console.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Alert and work with finance to recall or block any pending transactions",
+      "detail": "If a fraudulent wire transfer or invoice change request was sent, immediately notify finance to freeze or recall the transaction. Time is critical — contact the destination bank within hours for any chance of recovery.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Fully audit the compromised mailbox",
+      "detail": "Review the full sent folder, deleted items, calendar, and contacts for the attack window. Document all emails sent, received, and deleted by the attacker. Check for any data exfiltrated through email attachments.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=o365 user=[compromised_user] | stats count by Operation | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Enforce MFA and conditional access policies",
+      "detail": "If MFA was not enabled, enforce it immediately. If MFA was bypassed (via phishing for the OTP or SIM-swap), investigate the bypass method and apply stronger controls (hardware key, number matching, phishing-resistant FIDO2).",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Monitor the account for 30 days with enhanced alerting",
+      "detail": "Set alerts for any new inbox rules, unusual login locations, bulk email activity, or new OAuth grants for 30 days post-incident. Treat any anomaly as a priority re-investigation.",
+      "queries": {
+        "splunk": "index=cloud user=[recovered_user] | timechart count span=1d by Operation",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<15 minutes from phishing or suspicious email"
+    },
+    {
+      "name": "Containment Time",
+      "target": "activity"
+    },
+    {
+      "name": "Financial Fraud Prevention",
+      "target": "<1 hour after confirmation"
+    },
+    {
+      "name": "Awareness Campaign",
+      "target": "Stop wire transfer or mitigate within 24 hours"
+    },
+    {
+      "name": "Completion",
+      "target": "100% of high-risk employees trained post-incident"
+    },
+    {
+      "name": "Post-Incident Monitoring Period",
+      "target": "Minimum of 30 days for affected accounts"
+    }
+  ]
+}

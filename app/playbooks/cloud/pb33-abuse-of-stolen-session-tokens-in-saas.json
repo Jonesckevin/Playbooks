@@ -1,0 +1,178 @@
+{
+  "id": "pb33",
+  "num": 33,
+  "name": "Abuse of Stolen Session Tokens in SaaS",
+  "fullName": "Abuse of Stolen Session Tokens in SaaS",
+  "type": "Account Hijack – Session Token Abuse",
+  "severity": "High to Critical (based on data access and privilege level)",
+  "priority": "Critical",
+  "detection": "CASB, SIEM, EDR, SaaS Audit Logs, User Reports, Threat Intelligence",
+  "scenario": "An attacker gains access to a valid session token (e.g., via XSS, phishing, malware or token theft from endpoints) and uses it to impersonate a legitimate user on a SaaS platform (e.g., Microsoft 365, Google Workspace, Salesforce, Slack). This allows access without triggering MFA or login anomaly alerts.",
+  "mitre": "T1539, T1078, T1185",
+  "tools": "CASB (e.g., Microsoft Defender for Cloud Apps, Netskope, Lookout); SaaS Security Posture Management (e.g., Obsidian, AppOmni); SIEM (e.g., Sentinel, Splunk); Endpoint Detection and Response (e.g., CrowdStrike, Cortex XDR); Identity Providers (e.g., Okta, Azure AD, Google Workspace); Browser Security",
+  "sev": "critical",
+  "cat": "Cloud",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Detect session token reuse from unexpected IP or device",
+      "detail": "Look for the same session token being used from a new IP, new geographic location, or new user-agent string — without a corresponding new authentication event. This indicates the token was stolen and is being replayed by an attacker on a different device.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=saas_audit session_id=[suspect_session] | stats dc(src_ip) as ip_count values(src_ip) as sources, values(user_agent) as agents | where ip_count > 1",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Review all actions taken with the stolen session",
+      "detail": "Document every action performed using the stolen session token: files accessed, messages sent, settings changed, data exported, new OAuth grants made. This determines the scope of the breach and any data exposure.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=o365 OR sourcetype=gws session_id=[suspect_session] | stats count by Operation, resource | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Force logout and revoke all active sessions for the affected user",
+      "detail": "Revoke all active sessions across all devices for the compromised account. In M365: Revoke-AzureADUserAllRefreshToken. In Google Workspace: Admin Console > Users > Reset Sign-in Cookies. This immediately terminates the attacker's access.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Scan endpoint for malware: Ensure no token stealer is still active on the user’s device",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Rotate any exposed credentials or tokens: For linked applications or integrations",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Review session storage practices: Ensure session tokens are not stored in plaintext or improperly cached",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Strengthen SaaS login policies: Enforce re-authentication for sensitive actions or high-risk logins",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Re-enable user access with strict monitoring: After ensuring the endpoint is clean and MFA is re-enforced",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor user activity closely: Apply alerts on behavioural deviation or abnormal downloads",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Educate user on signs of session hijacking: Reinforce best practices for session security",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Conduct internal checks: To ensure no lateral movement or privilege abuse occurred",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Session Revocation Time",
+      "target": "<10 minutes from detection"
+    },
+    {
+      "name": "Endpoint Validation Time",
+      "target": "<1 hour"
+    },
+    {
+      "name": "Post-incident MFA Reinforcement",
+      "target": "100% completion within 24 hours"
+    },
+    {
+      "name": "SaaS Behaviour Monitoring Duration",
+      "target": "≥ 14 days post-incident"
+    },
+    {
+      "name": "RCA and Reporting Completion",
+      "target": "Within 3 business days"
+    }
+  ]
+}

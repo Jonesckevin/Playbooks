@@ -5,24 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SOC IR Playbook Library</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css">
 </head>
 <body>
+<button class="mobile-nav-toggle" id="mobile-nav-toggle" onclick="toggleMobileNav()" aria-label="Open navigation" aria-expanded="false">☰</button>
+<div class="mobile-nav-backdrop" id="mobile-nav-backdrop" onclick="closeMobileNav()"></div>
 <div class="layout">
 
-<div class="sidebar">
+<div class="sidebar" id="sidebar">
   <div class="sb-head">
     <div class="sb-title">SOC Playbook Library</div>
-    <div class="sb-sub">Splunk &middot; Network logs &middot; v2.0</div>
+    <div class="sb-sub">Splunk · KQL · Sigma · Velociraptor · Carbon Black · v4.0</div>
   </div>
   <div class="sb-search">
     <input type="text" id="sb-search" placeholder="Search playbooks..." oninput="searchNav(this.value)">
   </div>
   <div class="sb-nav" id="sb-nav">
-    <div class="sb-group-label" onclick="toggleGroup('g-overview')">Overview <span id="g-overview-arr">▾</span></div>
-    <div class="nav-group" id="g-overview">
-      <div class="nav-item active" id="nav-home" onclick="showPanel('home',this)">All playbooks</div>
-      <div class="nav-item" id="nav-base" onclick="showPanel('base',this)">Base alert procedure</div>
-      <div class="nav-item" id="nav-create" onclick="showPanel('create',this)"><span class="dot d-custom"></span>Create playbook</div>
+    <div class="sb-section" style="border-top:none">
+      <div class="sb-group-header" onclick="toggleGroup('g-overview')" style="border-left-color:transparent">
+        <span class="sb-group-label">Overview</span>
+        <span class="sb-group-arr" id="g-overview-arr">▾</span>
+      </div>
+      <div class="nav-group" id="g-overview">
+        <div class="nav-item active" id="nav-home" onclick="showPanel('home',this)">All playbooks</div>
+        <div class="nav-item" id="nav-base" onclick="showPanel('base',this)">Base alert procedure</div>
+        <div class="nav-item nav-item-navigator" id="nav-navigator" onclick="showPanel('navigator',this)">MITRE Navigator</div>
+        <div class="nav-item" id="nav-create" onclick="showPanel('create',this)"><span class="dot d-custom"></span>Create playbook</div>
+      </div>
     </div>
     <div id="dyn-nav"></div>
   </div>
@@ -38,10 +47,16 @@
     <div class="ph-su">Splunk SIEM &middot; Network &amp; traffic logs &middot; MITRE ATT&amp;CK mapped</div>
     <div class="ph-me">
       <span class="badge b-gray" id="pb-count-badge">0 playbooks</span>
-      <span class="badge b-blue">Splunk</span>
-      <span class="badge b-amber">Network logs</span>
+      <span class="badge b-amber">Splunk SPL</span>
+      <span class="badge b-blue">KQL · QRadar</span>
+      <span class="badge b-purple">Sigma</span>
+      <span class="badge b-green">Velociraptor VQL</span>
+      <span class="badge b-red">Carbon Black EDR</span>
       <span class="badge b-teal">MITRE mapped</span>
     </div>
+  </div>
+  <div class="cards-search-wrap">
+    <input type="text" id="card-search" class="cards-search" placeholder="Search cards by title, category, type, or MITRE...">
   </div>
   <div class="filter-bar">
     <span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Filter:</span>
@@ -103,11 +118,22 @@
   <div id="detail-content"></div>
 </div>
 
+<!-- MITRE NAVIGATOR -->
+<div class="panel" id="panel-navigator">
+  <div class="pb-ey">Coverage visualization</div>
+  <div class="pb-ti">MITRE ATT&amp;CK Navigator</div>
+  <div class="pb-me">
+    <span class="badge b-teal">Monitored techniques</span>
+    <span class="badge b-blue">Playbook mapped</span>
+  </div>
+  <div id="navigator-root"></div>
+</div>
+
 <!-- CREATE -->
 <div class="panel" id="panel-create">
-  <div class="pb-ey">Analyst tool</div>
-  <div class="pb-ti">Create a playbook</div>
-  <div class="pb-me"><span class="badge b-purple">Custom</span></div>
+  <div class="pb-ey" id="create-eyebrow">Analyst tool</div>
+  <div class="pb-ti" id="create-title">Create a playbook</div>
+  <div class="pb-me" id="create-meta"><span class="badge b-purple">Custom</span></div>
   <div class="success-banner" id="create-success">Playbook saved successfully and added to the library.</div>
   <div class="form-grid">
     <div class="form-group form-full">
@@ -150,10 +176,12 @@
       <label class="form-label">MITRE ATT&amp;CK technique IDs</label>
       <div id="mitre-tags-container">
         <div class="mitre-input-row">
-          <input class="mitre-tag-input" placeholder="T1059.001" maxlength="20">
+          <input class="mitre-tag-input" id="mitre-tag-input" list="mitre-id-suggestions" placeholder="T1059.001" maxlength="20">
           <button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="addMitreTag()">+ Add</button>
         </div>
+        <datalist id="mitre-id-suggestions"></datalist>
       </div>
+      <div id="mitre-input-help" class="mitre-input-help">Enter ATT&amp;CK ID (e.g. T1059.001). Click an added tag to open the ATT&amp;CK page.</div>
       <div id="mitre-tags-display" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px"></div>
     </div>
     <div class="form-group form-full">
@@ -187,7 +215,8 @@
   </div>
 
   <div class="form-actions">
-    <button class="btn btn-primary" onclick="savePlaybook()">Save playbook</button>
+    <button class="btn btn-primary" id="save-playbook-btn" onclick="savePlaybook()">Save playbook</button>
+    <button class="btn btn-secondary" id="cancel-edit-btn" style="display:none" onclick="cancelEdit()">Cancel edit</button>
     <button class="btn btn-secondary" onclick="resetForm()">Clear form</button>
   </div>
 </div>
@@ -195,6 +224,8 @@
 </div><!-- /main -->
 </div><!-- /layout -->
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

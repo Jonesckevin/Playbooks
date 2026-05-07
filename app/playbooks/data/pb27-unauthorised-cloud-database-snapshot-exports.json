@@ -1,0 +1,178 @@
+{
+  "id": "pb27",
+  "num": 27,
+  "name": "Unauthorised Cloud Database Snapshot Exports",
+  "fullName": "Unauthorised Cloud Database Snapshot Exports",
+  "type": "Data Exposure – Snapshot Abuse",
+  "severity": "High to Critical (especially if PII, financial data or secrets are involved)",
+  "priority": "Critical",
+  "detection": "Cloud Audit Logs, CSPM Alerts, SIEM, Storage Logs, Database Activity",
+  "scenario": "A cloud database snapshot (e.g., AWS RDS snapshot, Azure SQL Database export, GCP Cloud SQL backup) is created or shared without approval. This may lead to sensitive data exfiltration if the snapshot is exposed to unauthorised users or shared publicly.",
+  "mitre": "T1530, T1005, T1078.004, T1048",
+  "tools": "Cloud-native logs (e.g., AWS CloudTrail, Azure Activity Logs, GCP Admin Audit Logs); CSPM (e.g., Wiz, Prisma Cloud, Microsoft Defender for Cloud); SIEM (e.g., Sentinel, Splunk); DLP tools (e.g., Microsoft Purview, Forcepoint DLP); SOAR platform for automated response; Database Activity Monitoring (e",
+  "sev": "critical",
+  "cat": "Data",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Identify unauthorised snapshot creation or cross-account share",
+      "detail": "Look for RDS/Cloud SQL snapshot creation events from unexpected users or service accounts, or snapshot share events that target external AWS account IDs. Snapshots shared outside the organisation's account boundary represent immediate data exposure.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=cloudtrail eventName IN (CreateDBSnapshot,ModifyDBSnapshotAttribute,CopyDBSnapshot) | table _time, user, snapshotId, attributeValues | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Determine if the snapshot was accessed or downloaded",
+      "detail": "Check whether the shared snapshot was subsequently accessed — look for RestoreDBInstanceFromDBSnapshot events in the recipient account if accessible, or network egress from the snapshot storage.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=cloudtrail eventName=RestoreDBInstanceFromDBSnapshot | table _time, user, snapshotId, src_ip | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Revoke snapshot sharing and delete unauthorised snapshots",
+      "detail": "Remove all cross-account share permissions from the affected snapshot. Delete any unauthorised snapshots created by the attacker. Apply a service control policy (SCP) to prevent snapshot sharing outside the organisation's account structure.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Delete unauthorised snapshots: Remove rogue or unapproved copies",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Rotate affected credentials: If secrets were part of the database content or if service account was abused",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Audit IAM permissions: Ensure snapshot creation and sharing are tightly scoped to trusted roles only",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Review cross-account trust settings: Remove any risky or unmonitored permissions that allow sharing outside the organisa",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Restore trusted backup procedures: Reinstate verified, encrypted and access-controlled backups",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Revalidate database and snapshot integrity: Ensure no tampering or backdoors were introduced via restore processes",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Resume database operations: Once the environment and backups are secure and validated",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Increase logging around critical databases: Apply heightened surveillance for a defined observation period",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<10 minutes from snapshot creation or share"
+    },
+    {
+      "name": "Public Access Removal Time",
+      "target": "<30 minutes from confirmation"
+    },
+    {
+      "name": "Snapshot Deletion Time",
+      "target": "<1 hour for unauthorised snapshots"
+    },
+    {
+      "name": "IAM Policy Audit Completion",
+      "target": "100% of affected environments within 48 hours"
+    },
+    {
+      "name": "Compliance Notification Deadline",
+      "target": "Within 72 hours or as per regulatory requirements"
+    }
+  ]
+}

@@ -1,0 +1,206 @@
+{
+  "id": "pb16",
+  "num": 16,
+  "name": "Abuse of OAuth Integrations",
+  "fullName": "Abuse of OAuth Integrations",
+  "type": "Third-Party App Abuse / Token-Based Account Compromise",
+  "severity": "High to Critical (especially if privileged or sensitive account access is",
+  "priority": "granted)",
+  "detection": "Critical",
+  "scenario": "An attacker gains access to a user’s cloud or application account by tricking them into authorising a malicious OAuth app (e.g., through phishing or social engineering). This gives persistent access without requiring login credentials, bypassing MFA in many cases.",
+  "mitre": "T1525, T1556.004, T1087",
+  "tools": "Cloud admin consoles (e.g., Google Workspace Admin, Azure AD Portal, Microsoft; 365 Defender); Identity Protection (e.g., Okta, Duo, Conditional Access); SIEM (e.g., Splunk, Sentinel, QRadar); Cloud security tools (e.g., Microsoft Defender for Cloud Apps, G Suite Alert Center); Threat intelligence f",
+  "sev": "critical",
+  "cat": "Cloud",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Detect suspicious OAuth application consent events",
+      "detail": "Look for OAuth app grants with unusually broad scopes (read_mail, read_drive, send_as, contacts) from users who wouldn't normally authorise such apps. Attackers use phishing emails with fake \"Grant Access\" pages to trigger consent for malicious apps.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=azure_ad Operation=Consent action=Add | table _time, user, app_name, scope, src_ip | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Review audit logs for data access by the rogue application",
+      "detail": "After identifying the malicious app, review what actions it performed using its granted token — emails read, files accessed, calendar items viewed, contacts exported. The scope of access determines breach notification obligations.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=o365 ClientAppId=[malicious_app_id] | stats count by Operation, user | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Identify all users who authorised the malicious application",
+      "detail": "A single phishing campaign can result in many users authorising the same malicious app. Find every account that granted consent to the app's client ID — all of them need remediation.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=azure_ad app_id=[malicious_app_id] | stats values(user) as affected_users dc(user) as user_count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Revoke the OAuth application's access across all affected accounts",
+      "detail": "Remove the OAuth grant from every affected account via the admin console. In M365: Remove-AzureADOAuth2PermissionGrant. In Google Workspace: revoke via Admin Console > Security > API Controls. Ban the app's client ID at the tenant level.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Revoke active sessions and refresh tokens for affected accounts",
+      "detail": "The revoked OAuth grant stops future access, but the attacker may still hold a valid refresh token. Force revocation of all active sessions and refresh tokens for every affected account.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Rotate access tokens and passwords: For users and service accounts if app accessed credentials or secrets",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Clean up affected environments: Delete any backdoors, forwarding rules or uploaded files created via OAuth app",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Strengthen tenant-wide policies: Restrict risky OAuth scopes (e.g., offline access, mail.readwrite, drive full access)",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Update phishing protection: Block related phishing domains or links distributing the",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Restore affected access: After confirming account is secure and OAuth app has been removed",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Re-audit connected apps: Confirm no other high-risk apps are installed across users",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Reinforce user MFA & session controls: Tighten identity policies (e.g., revoke sessions, require re-authentication)",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Resume business operations: Once no further risk from the malicious integration remains",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<15 minutes from risky app grant"
+    },
+    {
+      "name": "App Revocation Time",
+      "target": "<30 minutes from identification"
+    },
+    {
+      "name": "User Notification Time",
+      "target": "<1 hour for affected users"
+    },
+    {
+      "name": "OAuth Policy",
+      "target": "100% of users behind admin-consented model (for sensitive"
+    },
+    {
+      "name": "Enforcement",
+      "target": "scopes)"
+    },
+    {
+      "name": "Incident Resolution",
+      "target": "Within 24–48 hours post-discovery"
+    }
+  ]
+}

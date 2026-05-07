@@ -1,0 +1,142 @@
+{
+  "id": "pb07",
+  "num": 7,
+  "name": "DDoS Attack",
+  "fullName": "DDoS Attack",
+  "type": "Network/Application Layer Availability Attack",
+  "severity": "High (especially for customer-facing or critical systems)",
+  "priority": "Critical if sustained outage or service degradation occurs",
+  "detection": "NOC alerts, SIEM, firewall logs, application monitoring tools,",
+  "scenario": "An external attacker launches a distributed denial-of-service (DDoS) attack targeting public-facing infrastructure such as websites, APIs, DNS servers or network gateways. The objective is to disrupt service availability, degrade performance or cause reputational and financial damage.",
+  "mitre": "T1498, T1499, T1498.001",
+  "tools": "SIEM (e.g., Splunk, Sentinel, QRadar); Network traffic analysis tools (e.g., NetFlow, Zabbix, Ixia); DDoS protection services (e.g., Cloudflare, AWS Shield, Akamai Kona, Arbor); Firewall/WAF (e.g., Fortinet, Palo Alto, ModSecurity); CDN and DNS services (e.g., Cloudflare, Fastly, Akamai); ISP suppor",
+  "sev": "critical",
+  "cat": "Application",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Confirm traffic spike and identify the attack vector",
+      "detail": "Look for a sudden surge in connection counts, packet rates, or bandwidth consumption against your public-facing IPs. Determine the attack type: volumetric (UDP/ICMP flood), protocol (SYN flood with many half-open connections), or application layer (HTTP GET flood to a specific URI).",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall dest_ip=[public_ip] | bucket _time span=1m | stats count by _time, src_ip | timechart count by src_ip limit=10",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Confirm service impact and scope",
+      "detail": "Check availability monitoring dashboards or attempt to reach the targeted service from an external connection. Quantify the attack traffic volume against normal baseline. Identify whether collateral services are being affected.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall dest_ip=[target_ip] dest_port=[target_port] | timechart count span=1m",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Determine if source IPs are spoofed (reflection/amplification)",
+      "detail": "In reflection attacks, the victim's IP appears as the query source — blocking individual source IPs will not be effective. Check for DNS ANY/TXT query spikes, NTP monlist abuse, or SSDP responses pointing at your IP.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns record_type IN (\"ANY\",\"TXT\") | stats count by src_ip, dest_ip | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Engage cloud DDoS mitigation and apply rate limiting",
+      "detail": "Route traffic through your DDoS mitigation provider (Cloudflare Magic Transit, AWS Shield Advanced, Akamai). Apply rate limiting at the WAF/CDN level for application-layer attacks. Use ACLs to drop traffic by rate threshold or specific attack pattern.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Block confirmed malicious source IPs and geo-ranges",
+      "detail": "Apply firewall deny rules for confirmed attacker IP ranges. Consider temporary geo-blocking for source countries with no legitimate users if the attack is concentrated geographically. Coordinate with ISP for upstream blackholing if volume exceeds perimeter capacity.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall dest_ip=[target_ip] | stats count by src_ip | sort -count | head 20",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Fine-tune ACLs and WAF rules based on attack traffic profile",
+      "detail": "After the attack subsides, analyse the traffic pattern to build precise blocking rules. Remove any overly broad temporary rules that may affect legitimate users. Restore normal routing if traffic was temporarily black-holed.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Check for blended threats — malware or intrusion during the disruption",
+      "detail": "DDoS attacks are sometimes used as a smokescreen for concurrent intrusion activity. Review logs from during the attack window for any unusual authentication, lateral movement, or data access that may have occurred while defences were focused on availability.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall action=allow NOT dest_ip IN (\"10.*\",\"172.16.*\",\"192.168.*\") earliest=[attack_start] latest=[attack_end] | stats count by src_ip, dest_port | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Confirm full service restoration and notify stakeholders",
+      "detail": "Perform end-to-end service validation (health checks, API tests, user acceptance testing). If SLAs or customer-facing services were impacted, notify customers within the required timeframe. Document the outage duration precisely.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Time to Detect DDoS",
+      "target": "<5 minutes from onset"
+    },
+    {
+      "name": "Mitigation Engagement Time",
+      "target": "<15 minutes from confirmation"
+    },
+    {
+      "name": "Service Downtime",
+      "target": "Zero or <30 minutes"
+    },
+    {
+      "name": "Customer Notification Time",
+      "target": "Within 1 hour if SLA is affected"
+    },
+    {
+      "name": "Post-Mortem Completion",
+      "target": "Within 48 hours"
+    }
+  ]
+}

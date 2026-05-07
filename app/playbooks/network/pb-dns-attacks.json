@@ -1,0 +1,198 @@
+{
+  "id": "pb-dns",
+  "num": 37,
+  "name": "DNS Attacks",
+  "fullName": "DNS Attacks (Tunnelling, DGA, Amplification)",
+  "type": "Network – DNS Abuse",
+  "severity": "Medium to High",
+  "priority": "High",
+  "detection": "sourcetype=dns, sourcetype=firewall, sourcetype=netflow",
+  "scenario": "DNS-based attack patterns including tunnelling for C2/exfiltration, DGA/fast-flux for malware C2, and DNS amplification for DDoS.",
+  "mitre": "T1071.004, T1048.003, T1568.002, T1498",
+  "tools": "",
+  "sev": "high",
+  "cat": "Network",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Look for high query volume per domain from a single host",
+      "detail": "Threshold typically >300 queries/hour. Look for single internal hosts making abnormally high numbers of queries to a single external domain.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns | stats count by src_ip, query | where count > 300 | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Check for high-entropy subdomains indicating encoded data",
+      "detail": "Subdomains longer than 50 characters of alphanumeric-only characters are a strong indicator of base32/base64 encoded data being exfiltrated via DNS tunnelling.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns | eval qlen=len(query) | where qlen > 50 | stats count avg(qlen) as avg_len by src_ip, query | sort -avg_len",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Identify unusual DNS record types abused for tunnelling",
+      "detail": "TXT, NULL, and ANY record types are rarely used in legitimate traffic and are commonly abused for DNS tunnelling to encode data payloads.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns record_type IN (\"TXT\",\"NULL\",\"ANY\") | stats count by src_ip, record_type, query | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "For DGA: look for many distinct A records per FQDN and low TTLs",
+      "detail": "Domain Generation Algorithm (DGA) C2 produces many distinct random-looking domain queries. Fast-flux uses TTLs below 60 seconds with many different IP answers.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns record_type=A | stats dc(answer) as ips count by query | where ips > 5 | sort -ips",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Cross-reference queried domains against threat intel blocklists",
+      "detail": "Compare all queried domains against known-malicious domain lists. Any match from an internal host is a confirmed IOC.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns | lookup threat_intel_domains query OUTPUT category | where isnotnull(category) | stats count by src_ip, query, category",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Block confirmed C2 domain at DNS resolver and firewall",
+      "detail": "Add the tunnelling domain to the DNS resolver blocklist (return NXDOMAIN). Apply an outbound firewall deny rule for all traffic to the resolved IPs.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns query=\"*[suspect_domain]*\" earliest=-15m | stats count by src_ip",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Identify all internal hosts that successfully resolved the suspect domain",
+      "detail": "Find every internal host that received a successful DNS response from the C2 domain. All of these are potential infection candidates requiring investigation.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns query=\"*[suspect_domain]*\" rcode=0 | stats values(src_ip) as affected_hosts dc(src_ip) as host_count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Isolate the originating host at the network layer",
+      "detail": "Network-isolate the host generating tunnel traffic. Apply firewall rules to block all non-essential outbound traffic from that IP while the investigation continues.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Apply rate limiting on ANY/TXT queries if amplification DDoS is confirmed",
+      "detail": "For DNS amplification attacks, apply rate limiting on outbound ANY and TXT query responses. Engage upstream ISP for blackholing if traffic volume exceeds perimeter capacity.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove malware or tooling responsible for DNS tunnelling",
+      "detail": "Use EDR to identify and remove the tunnelling agent from the affected host. Check common persistence locations: scheduled tasks, registry run keys, startup folders.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Update DNS resolver blocklist with all confirmed malicious domains",
+      "detail": "Add all discovered C2 and exfiltration domains to the resolver blocklist. Share IOCs with threat intel communities if policy allows.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Monitor remediated hosts for 7 days for recurrence of DNS tunnelling patterns",
+      "detail": "Apply enhanced DNS logging and alerting on the recovered host. Treat any recurrence as a priority re-investigation.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns src_ip=[remediated_host] | eval qlen=len(query) | where qlen > 40 | timechart count span=1h",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Review DNS resolver configuration",
+      "detail": "Ensure recursion is restricted to internal CIDRs only. Disable open recursion. Enable query logging if not already active.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<20 min from anomalous query spike"
+    },
+    {
+      "name": "Domain Block Time",
+      "target": "<10 min after confirmation"
+    },
+    {
+      "name": "Host Isolation Time",
+      "target": "<30 min from confirmation"
+    },
+    {
+      "name": "Post-Incident Monitoring",
+      "target": "7 days minimum"
+    }
+  ]
+}

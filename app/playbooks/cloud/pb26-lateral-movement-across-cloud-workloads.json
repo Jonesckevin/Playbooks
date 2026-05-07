@@ -1,0 +1,178 @@
+{
+  "id": "pb26",
+  "num": 26,
+  "name": "Lateral Movement Across Cloud Workloads",
+  "fullName": "Lateral Movement Across Cloud Workloads",
+  "type": "Cloud Intrusion – Lateral Movement",
+  "severity": "High to Critical (depending on the systems accessed and data",
+  "priority": "exposed)",
+  "detection": "Critical",
+  "scenario": "An attacker gains a foothold in one cloud workload (e.g., EC2, Azure VM, Kubernetes pod or container) and moves laterally by leveraging over-permissive roles, unsecured credentials, shared storage or misconfigured network rules to reach other workloads or services.",
+  "mitre": "T1021, T1570, T1086.001, T1534",
+  "tools": "SIEM (e.g., Sentinel, Splunk, QRadar); CSPM (e.g., Wiz, Prisma Cloud, Defender for Cloud); Cloud EDR (e.g., CrowdStrike, Cortex XDR, Falco for containers); Cloud audit logs (AWS CloudTrail, Azure Activity Logs, GCP Audit Logs); Network visibility (e.g., VPC Flow Logs, Azure NSG flow logs); SOAR tool",
+  "sev": "critical",
+  "cat": "Cloud",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Identify the initial compromised workload and pivot chain",
+      "detail": "Determine which cloud instance/container/pod was first compromised and trace the lateral movement path. Look for cross-instance SSH, API calls between workloads using instance credentials, S3 cross-account access, or inter-VPC traffic on unusual ports.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=vpc_flow_logs action=ACCEPT | stats count by src_addr, dst_addr, dst_port | where src_addr IN ([cloud_cidr]) AND dst_addr IN ([cloud_cidr]) AND dst_port NOT IN (80,443) | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Review cloud audit logs for credential or role usage during movement",
+      "detail": "Check CloudTrail/Azure Activity Logs for AssumeRole calls, metadata service access (169.254.169.254), credential creation, or IAM permission changes originating from the compromised instances.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=cloudtrail src_ip IN ([compromised_instances]) | stats count by eventName, userIdentity.arn | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Isolate affected workloads using security groups or network ACLs",
+      "detail": "Apply restrictive security group rules to the compromised instances to block east-west traffic. If using Kubernetes, cordon the affected nodes and delete compromised pods. Disable IAM roles associated with the compromised workloads.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Terminate compromised instances or containers: Rebuild using trusted images and validated IaC templates",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Rotate affected credentials: Reissue cloud access keys, service principals and user passwords involved",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Remove backdoors or persistence: Check cron jobs, startup scripts, IAM roles or installed malware",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Fix network/security group rules: Prevent recurrence by enforcing least-access models",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Re-deploy clean workloads: From verified pipelines or hardened base images",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Restore network trust zones: Gradually re-enable east-west communication with strict controls",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Re-enable affected services: Only after thorough validation and logging is in place",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Increase monitoring on recovery assets: Use SIEM and runtime tools to validate clean operation",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<15 minutes from lateral movement start"
+    },
+    {
+      "name": "Isolation Time",
+      "target": "<30 minutes from detection"
+    },
+    {
+      "name": "Credential Rotation Time",
+      "target": "<2 hours from confirmation"
+    },
+    {
+      "name": "Affected Asset Recovery Time",
+      "target": "Within 48 hours"
+    },
+    {
+      "name": "Post-Mortem Report Completion",
+      "target": "Within 3 business days"
+    }
+  ]
+}

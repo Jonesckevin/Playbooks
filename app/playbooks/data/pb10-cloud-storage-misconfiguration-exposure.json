@@ -1,0 +1,226 @@
+{
+  "id": "pb10",
+  "num": 10,
+  "name": "Cloud Storage Misconfiguration Exposure",
+  "fullName": "Cloud Storage Misconfiguration Exposure",
+  "type": "Data Exposure – Misconfiguration",
+  "severity": "High to Critical (depends on sensitivity of data)",
+  "priority": "High",
+  "detection": "Cloud Security Posture Management (CSPM), SIEM, Threat Intel,",
+  "scenario": "Sensitive or confidential data (e.g., logs, databases, personal information) is exposed to the public due to misconfigured permissions on cloud storage services, often discovered via threat intelligence feeds, automated scanners or internal audits.",
+  "mitre": "T1530, T1562.007",
+  "tools": "CSPM tools (e.g., Wiz, Prisma Cloud orca, AWS Config, Microsoft Defender for; Cloud); SIEM (e.g., Sentinel, Splunk); Cloud audit logs (e.g., AWS CloudTrail, Azure Activity Logs, GCP Admin Activity); IAM systems (e.g., AWS IAM, Azure AD, Google IAM); DLP or classification systems (e.g., Microsoft Pur",
+  "sev": "critical",
+  "cat": "Data",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Receive and validate the CSPM or threat intel alert",
+      "detail": "Confirm the alert details: which bucket/container/blob, what permission was misconfigured (public-read, allUsers, anonymous), and when the exposure was first detected. Determine if this was a recent change or a long-standing misconfiguration.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=cloudtrail OR sourcetype=azure_activity eventName=PutBucketAcl OR PutBucketPolicy | table _time, user, bucketName, permission | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Identify what data was exposed and whether it was accessed",
+      "detail": "Review the object access logs for the bucket/container for the exposure window. Any access from external IPs during that period indicates the data was accessed by an unauthorised party. Classify the data type to assess regulatory obligations.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=s3_access_log | stats count by requester, bucket, key, http_status | where requester=\"*\" AND http_status=200 | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Remove public access permissions immediately",
+      "detail": "Remove the public-read, allUsers, or anonymous access grant from the bucket/container/object. In AWS: enable Block Public Access at the account level. In Azure: disable \"Allow Blob Public Access\" at the storage account level. Verify the change propagated.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Rotate any credentials or API keys that were exposed",
+      "detail": "If the exposed data contained credentials, API keys, connection strings, or tokens, rotate all of them immediately — even if there is no evidence of access. Assume they are compromised.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Review and fix IAM policies: Audit and adjust overly permissive roles or storage policies",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Enforce default encryption, versioning and public access blocking",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Remove or archive unnecessary files, scrub exposed content",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Use identity-based access controls instead of public sharing links",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Enable bucket/block-level protection",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Clean exposed data",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Reconfigure secure sharing mechanisms",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Validate proper access controls: Confirm access is restricted to intended users and services",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Confirm data integrity: Ensure no tampering or unauthorised modifications occurred",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Resume operations: Restore use of cloud storage once properly secured",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Update inventory: Reflect current access control status in asset and data tracking systems",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<1 hour from exposure"
+    },
+    {
+      "name": "Access Removal Time",
+      "target": "<30 minutes from alert"
+    },
+    {
+      "name": "Public Exposure Duration",
+      "target": "Ideally <1 hour"
+    },
+    {
+      "name": "Impact Assessment Completion",
+      "target": "Within 24–48 hours"
+    },
+    {
+      "name": "Policy Remediation Time",
+      "target": "Within 72 hours"
+    }
+  ]
+}

@@ -1,0 +1,178 @@
+{
+  "id": "pb36",
+  "num": 36,
+  "name": "Unauthorised SaaS OAuth Application",
+  "fullName": "Unauthorised SaaS OAuth Application",
+  "type": "OAuth Abuse – Unauthorised Third-Party App",
+  "severity": "High (depending on the scopes granted and data accessed)",
+  "priority": "High to Critical",
+  "detection": "CASB, SSPM, SaaS Admin Portals, SIEM, Threat Intelligence Feeds",
+  "scenario": "An employee or attacker grants a third-party application access to a corporate SaaS account using OAuth scopes (e.g., read email, access calendar, read/write files). These applications may exfiltrate data, impersonate users, or maintain persistent access without triggering standard credential or MFA alerts.",
+  "mitre": "T1528, T1550.001, T1098.003",
+  "tools": "SSPM/CASP (e.g., AppOmni, Obsidian, Microsoft Defender for Cloud Apps); SaaS Admin Portals (e.g., Azure AD, Google Admin Console, Slack Admin); SIEM (e.g., Sentinel, Splunk); Threat Intelligence (for app risk scoring and reputation); SOAR (to automate detection and revocation); Endpoint Security (to",
+  "sev": "critical",
+  "cat": "Cloud",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Identify the rogue OAuth application and its granted permissions",
+      "detail": "Check the SaaS platform's connected apps / third-party integrations list for any applications not in the approved list, particularly those with broad scopes (read/write mail, access contacts, read files). Compare against the approved app registry.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=azure_ad Operation=Consent | table _time, user, app_name, scope, admin_consent | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Determine what the application accessed using its granted token",
+      "detail": "Review SaaS audit logs for API calls made by the rogue application. Document all resources accessed, actions performed, and data exported during the period the application held a valid token.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=o365 AppId=[rogue_app_id] | stats count by Operation, user, ObjectId | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Revoke the rogue application's OAuth grant from all affected accounts",
+      "detail": "Remove the application's OAuth grant via the admin console for every account that authorised it. Block the application's client ID at the tenant level to prevent re-authorisation. Revoke any outstanding tokens the app may hold.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove residual access tokens: Revoke all tokens granted to the app and refresh user sessions",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Rotate credentials and MFA: If impersonation or token theft is suspected",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Conduct full data access review: Determine what the app had access to and if data was exfiltrated",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Update OAuth policy: Add the app to a blocklist or blacklist category in SSPM or",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Reinstate user access with monitoring: Ensure user awareness and endpoint clean-up if malware is linked",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Apply stricter app review process: Require internal approval for all new app integrations",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor for recurrence: Create detections for similar app authorisation patterns or behaviours",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Validate SaaS logs and alerts: Ensure full visibility of high-risk OAuth events",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "App Revocation Time",
+      "target": "<15 minutes from detection"
+    },
+    {
+      "name": "User Notification & Session Reset",
+      "target": "<30 minutes"
+    },
+    {
+      "name": "Full App Audit & RCA Completion",
+      "target": "Within 48 hours"
+    },
+    {
+      "name": "OAuth Policy Update",
+      "target": "Within 3 business days"
+    },
+    {
+      "name": "User Awareness Training Completion",
+      "target": "100% within 5 business days"
+    }
+  ]
+}

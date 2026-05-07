@@ -1,0 +1,178 @@
+{
+  "id": "pb25",
+  "num": 25,
+  "name": "Misconfigured Public Cloud Storage Access",
+  "fullName": "Misconfigured Public Cloud Storage Access",
+  "type": "Cloud Misconfiguration – Public Exposure",
+  "severity": "High to Critical (depending on sensitivity of exposed data)",
+  "priority": "Critical",
+  "detection": "CSPM Tools, Cloud Audit Logs, SIEM, Threat Intelligence, Manual",
+  "scenario": "A cloud storage bucket, container or object is unintentionally made publicly accessible or exposed to unauthorised users (e.g., via public-read or authenticated users access settings). This may lead to data leakage, regulatory non-compliance or exploitation by threat actors.",
+  "mitre": "T1530, T1526, T1213.003",
+  "tools": "CSPM (e.g., Wiz, Prisma Cloud orca); Cloud-native tools (e.g., AWS S3 Access Analyzer, Azure Defender, GCP Security; Command Center); SIEM (e.g., Sentinel, Splunk); DLP tools (e.g., Microsoft Purview, Google DLP); IAM policy analyzers (e.g., PMapper, CloudSploit)",
+  "sev": "critical",
+  "cat": "Cloud",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Confirm the public exposure and identify affected objects",
+      "detail": "Verify that the bucket/container is genuinely publicly accessible — test with an unauthenticated browser or curl request. Identify which specific objects are exposed vs which have restrictive object-level ACLs.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=s3_access_log requester=\"*\" http_status=200 | stats count by bucket, key | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    },
+    {
+      "title": "Review access logs for the full exposure window",
+      "detail": "Determine how long the bucket was public and check every external access event during that window. External downloads of sensitive objects confirm data exfiltration and trigger regulatory obligations.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=cloudtrail eventName IN (GetObject,ListBucket) NOT userIdentity.accountId=[your_account_id] | stats count by bucket, key, src_ip | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Remove public access immediately — block at account level",
+      "detail": "Remove the public-read ACL from the bucket and apply the \"Block All Public Access\" setting at the AWS account or GCP project level to prevent future misconfiguration. In Azure, disable \"Allow Blob Public Access\" on the storage account.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Correct IAM or ACL policies: Use policy templates or automation to enforce secure access controls",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Rotate keys or tokens: If access keys, SAS tokens or signed URLs were exposed",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Remove unauthorised files: Delete uploaded malware, backdoors or tampered content (if applicable)",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Disable bucket listing: Prevent attackers from enumerating contents in the future",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Restore secure access: Only after verifying proper permissions are in place",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Notify affected teams: Especially data owners, app teams, compliance and legal if sensitive data was involved",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Resume usage: After confirming no remaining exposure or misconfiguration",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Enable stronger logging: If not already in place, ensure CloudTrail/S3/Azure Blob/GCP audit logs are active",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<5 minutes from misconfiguration"
+    },
+    {
+      "name": "Public Access Removal Time",
+      "target": "<15 minutes from alert"
+    },
+    {
+      "name": "Exposure Impact Report",
+      "target": "Within 24 hours"
+    },
+    {
+      "name": "IAM Policy Audit Completion",
+      "target": "100% of affected projects or buckets within 48 hours"
+    },
+    {
+      "name": "Compliance Review Completion",
+      "target": "Within 72 hours (or regulatory deadline)"
+    }
+  ]
+}

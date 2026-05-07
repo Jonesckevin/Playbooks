@@ -1,0 +1,202 @@
+{
+  "id": "pb18",
+  "num": 18,
+  "name": "Unauthorised JavaScript Injection on Public",
+  "fullName": "Unauthorised JavaScript Injection on Public",
+  "type": "Web Application Compromise – Script Injection",
+  "severity": "High to Critical (especially if PII, card data or authentication data is",
+  "priority": "captured)",
+  "detection": "Critical",
+  "scenario": "An attacker injects malicious JavaScript code into a public-facing website (via compromised CMS, third-party scripts, misconfigured CDN or direct file replacement). This could lead to credential harvesting, skimming (e.g., Magecart), clickjacking, redirection to malicious sites or session hijacking.",
+  "mitre": "T1059.007, T1185, T1189, T1557.002",
+  "tools": "Web Monitoring Tools (e.g., Detectify, JSWatcher, SilentPush, Snyk, Sucuri); SIEM (e.g., Splunk, Sentinel, QRadar); Web Application Firewall (e.g., Cloudflare WAF, AWS WAF, Imperva); CMS platforms and source repositories (e.g., WordPress, GitHub); File integrity monitoring (e.g., OSSEC, Tripwire)",
+  "sev": "critical",
+  "cat": "Application",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Confirm injected or modified JavaScript via file integrity or WAF alert",
+      "detail": "Compare the current state of JavaScript files in the web root against a known-good baseline (git history, CDN hash). Look for recently modified .js files, unexpected inline script tags, or new external script src attributes pointing to unfamiliar domains.",
+      "queries": {
+        "splunk": "index=web sourcetype=access_log | search uri_path IN (\"*.js\",\"*.min.js\") | stats count by uri_path, src_ip | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Identify the injection source and payload type",
+      "detail": "Determine how the script was injected: compromised CMS plugin/theme, breached third-party CDN, admin credential theft, or direct file replacement. Analyse the payload — keylogger, card skimmer (Magecart), session hijacker, or redirect.",
+      "queries": {
+        "splunk": "index=web sourcetype=access_log method=POST uri_path IN (\"/wp-admin/*\",\"/admin/*\",\"/wp-login.php\") | stats count by src_ip, uri_path | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Assess customer impact — was data captured and exfiltrated",
+      "detail": "Check if the malicious script was making external HTTP requests (to attacker-controlled domains) containing form field data, session tokens, or payment card details. Review proxy or DNS logs for requests to unfamiliar analytics or tracking domains during the exposure window.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy dest_host NOT IN ([approved_domains]) | stats count by dest_host, src_ip | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Remove or replace injected scripts immediately",
+      "detail": "Restore clean versions of affected JavaScript files from the last known-good backup or version control. Remove any injected inline scripts. Purge CDN caches to ensure users receive the clean version. Document the exact content of the malicious script for forensic analysis.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Block the attacker's exfiltration domain at proxy and DNS level",
+      "detail": "If the script was exfiltrating data to an external domain, block that domain immediately at the DNS resolver and web proxy to stop any ongoing data capture from user browsers.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Identify root cause: Compromised admin credentials? Insecure plugin? Thirdparty breach?",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Patch CMS or plugin: Apply updates and disable unnecessary or untrusted components",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Replace compromised components: Reinstall from official sources with verified integrity",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Clean residual access: Change admin credentials, revoke tokens, check server logs for persistence techniques",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Validate website integrity",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Resume normal operation",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Perform vulnerability assessment",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor for repeat attempts",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<15 minutes from script modification or alert"
+    },
+    {
+      "name": "Script Removal Time",
+      "target": "<30 minutes after detection"
+    },
+    {
+      "name": "Website Restoration Time",
+      "target": "<2 hours if critical path is affected"
+    },
+    {
+      "name": "Impact Notification Time",
+      "target": "Within 24 hours (or regulatory SLA)"
+    },
+    {
+      "name": "Repeat Attack Monitoring Duration",
+      "target": "Minimum 7 days of enhanced surveillance"
+    }
+  ]
+}

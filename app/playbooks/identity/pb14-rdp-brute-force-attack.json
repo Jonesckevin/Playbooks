@@ -1,0 +1,214 @@
+{
+  "id": "pb14",
+  "num": 14,
+  "name": "RDP Brute-Force Attack",
+  "fullName": "RDP Brute-Force Attack",
+  "type": "Credential Attack – RDP Login Abuse",
+  "severity": "High (especially for privileged or sensitive systems)",
+  "priority": "Critical if access is gained",
+  "detection": "SIEM, Windows Security Event Logs, EDR, IDS/IPS, Firewall logs,",
+  "scenario": "An attacker launches a brute-force or password spraying attack against internet-exposed or internal RDP services to gain access using weak or reused credentials. Successful access may lead to lateral movement, malware deployment or data exfiltration.",
+  "mitre": "T1110.001, T1078, T1021.001",
+  "tools": "SIEM (e.g., Splunk, Sentinel, QRadar); EDR (e.g., CrowdStrike, Microsoft Defender for Endpoint, Cortex XDR); Firewall and VPN logs (e.g., Fortinet, Palo Alto, Cisco ASA); Windows Event Viewer (Security Logs: 4624, 4625, 4648, 4672); Threat intelligence platforms (for IP enrichment); Brute-force dete",
+  "sev": "critical",
+  "cat": "Identity",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Confirm brute-force pattern and volume of failed attempts",
+      "detail": "RDP brute force produces high volumes of failed authentication against the same destination IP on port 3389. Look for Event ID 4625 (failed login) with many distinct usernames or the same username repeated. Password spraying shows one attempt per account across many accounts.",
+      "queries": {
+        "splunk": "index=network sourcetype=wineventlog EventCode=4625 dest_port=3389 | stats count dc(user) as users by src_ip | where count > 50 | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
+        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+      }
+    },
+    {
+      "title": "Check for successful logins following the failure spike — brute force success",
+      "detail": "A successful login (Event ID 4624) from the same attacker IP shortly after a failure spike indicates the brute force succeeded. This is the critical escalation point — treat the destination host as fully compromised.",
+      "queries": {
+        "splunk": "index=network sourcetype=wineventlog EventCode IN (4624,4625) src_ip=[attacker_ip] | stats count(eval(EventCode=4624)) as success count(eval(EventCode=4625)) as fail by user | where success > 0",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
+        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+      }
+    },
+    {
+      "title": "Analyse attacker IP reputation and geographic origin",
+      "detail": "Check the attacker's IP geolocation and ASN. Most RDP brute force comes from known VPS providers (DigitalOcean, Linode, OVH), compromised residential IPs, or TOR exit nodes. Geolocation helps build blocking rules and assess whether other assets are targeted.",
+      "queries": {
+        "splunk": "index=network sourcetype=wineventlog EventCode=4625 dest_port=3389 | stats count by src_ip | sort -count | head 20",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
+        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Block attacker IPs at the firewall and VPN gateway",
+      "detail": "Apply deny rules at the perimeter for the attacker's source IPs. If RDP is exposed directly to the internet, immediately restrict access to approved IP ranges or require VPN. Temporarily disable RDP on high-risk systems that were targeted until secured.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Lock or reset accounts targeted by the brute force",
+      "detail": "Force a password reset on all accounts targeted — especially if any succeeded. Enforce account lockout policy (maximum 5 failed attempts, 30-minute lockout). Notify users if their account was targeted.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove unauthorised access: Kill sessions, reset passwords and revoke tokens or certificates",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Patch exposed systems: Update RDP services and OS to prevent exploits (e.g.,",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Clean persistence mechanisms: BlueKeep)",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Validate no lateral movement: Check for new scheduled tasks, services or registry keys added by attacker",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Use EDR or log review to ensure attacker did not spread internally",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Reinstate secure RDP access: Only via VPN or bastion host with MFA",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Notify users or IT teams: Alert those impacted by the attempted logins or credential resets",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor closely postincident: Watch for continued brute-force activity or targeted retries",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Conduct password audit: Prompt company-wide password hygiene checks if weak credentials were used",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<5 minutes from brute-force pattern onset"
+    },
+    {
+      "name": "Containment Time",
+      "target": "<30 minutes from confirmation"
+    },
+    {
+      "name": "Credential Reset Time",
+      "target": "<2 hours for compromised or targeted accounts"
+    },
+    {
+      "name": "Exposure Time",
+      "target": "No unauthorised RDP access exceeding 15 minutes"
+    },
+    {
+      "name": "RDP Lockdown Coverage",
+      "target": "100% of internet-facing RDP endpoints secured or removed"
+    }
+  ]
+}

@@ -1,0 +1,210 @@
+{
+  "id": "pb02",
+  "num": 2,
+  "name": "Insider Data Exfiltration",
+  "fullName": "Insider Data Exfiltration",
+  "type": "Insider Threat – Data Exfiltration",
+  "severity": "High (especially for regulated or confidential data)",
+  "priority": "High to Critical",
+  "detection": "DLP, SIEM, Proxy logs, CASB, EDR, Email gateway",
+  "scenario": "An internal employee, contractor or privileged user attempts to or successfully exfiltrates sensitive data through unauthorised channels such as personal email, cloud storage, removable media or file transfer tools.",
+  "mitre": "T1020, T1048, T1537",
+  "tools": "SIEM (e.g., Splunk, IBM QRadar, Microsoft Sentinel); DLP systems (e.g., Symantec, Forcepoint, Microsoft Purview); CASB (e.g., Netskope, Microsoft Defender for Cloud Apps); Endpoint agents (e.g., EDR with data transfer monitoring); Proxy & firewall logs; Email Security Gateway (e.g., Proofpoint, Mime",
+  "sev": "critical",
+  "cat": "Insider Threat",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Identify abnormal outbound data volume",
+      "detail": "Look for unusually high outbound data from a single internal IP — particularly to cloud storage (Dropbox, Google Drive, OneDrive, Mega, WeTransfer) or personal email. Compare against that host's 30-day baseline to contextualise the anomaly.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy OR sourcetype=firewall | stats sum(bytes_out) as total_out by src_ip, dest_host | where total_out > 500000000 | sort -total_out",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Check for use of known exfiltration channels",
+      "detail": "Look for HTTP/S uploads to cloud storage platforms, FTP/SFTP to unknown external destinations, large email attachments via SMTP, or DNS query payloads. Each channel has different detection approaches.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy dest_host IN (\"*.dropbox.com\",\"*.drive.google.com\",\"*.onedrive.com\",\"*.mega.nz\",\"*.wetransfer.com\",\"*.box.com\") | stats sum(bytes_out) as out by src_ip, dest_host | sort -out",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Establish a full timeline of the transfer",
+      "detail": "Determine when the transfer started, how long it ran, total volume, and destination. Cross-reference with authentication logs to confirm the user was actively logged in — or to detect whether credentials were used by another party.",
+      "queries": {
+        "splunk": "index=network src_ip=[suspect_ip] | bucket _time span=1h | stats sum(bytes_out) as out by _time, dest_host | timechart sum(out) by dest_host",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Investigate user behaviour context",
+      "detail": "Check for privilege escalation attempts, after-hours access, failed access attempts to restricted shares, or bulk file downloads preceding the transfer. Determine if action was malicious, accidental, or a policy gap.",
+      "queries": {
+        "splunk": "index=network sourcetype=auth src_ip=[suspect_ip] | table _time, user, action, dest_ip | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Suspend user network access and active sessions",
+      "detail": "Coordinate with identity/HR/management before acting — insider threat cases require careful handling. At the network level, block the user's workstation IP at the firewall. Do not alert the user until instructed by management or legal.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Block the exfiltration channel",
+      "detail": "Apply proxy/firewall blocks for the specific destination domains or IPs used. Revoke cloud sharing links, block outbound email attachments to personal domains, and disable USB ports on the endpoint if applicable.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy src_ip=[suspect_ip] | stats sum(bytes_out) as out by dest_host | sort -out",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Preserve all forensic evidence intact",
+      "detail": "Export and archive proxy logs, firewall logs, netflow records, and authentication logs covering the full activity window. Store in a tamper-evident location. Do NOT modify, delete, or overwrite any logs — these may be needed for legal proceedings.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Assess scope: what data was transferred and where",
+      "detail": "Identify the source share or system the files originated from, classify the data type (PII, financial, IP, credentials), and estimate total volume transferred. This determines regulatory notification obligations (GDPR, HIPAA, PCI-DSS).",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall src_ip=[suspect_ip] dest_ip=[exfil_dest] | stats sum(bytes_out) as total, count by dest_port | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove any unauthorised tools or staging areas",
+      "detail": "Check the user's endpoint for personal file transfer apps, browser extensions for cloud sync, rogue USB devices, or compressed/encrypted archives being staged for transfer. Coordinate with endpoint team.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Apply stricter DLP and egress controls",
+      "detail": "Tighten DLP policies for the affected data categories. Apply firewall egress rules to block upload to personal cloud storage for all hosts. Review and correct any misconfigured file share permissions that gave access to the data.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Escalate to legal, HR, and compliance",
+      "detail": "Insider threat cases require immediate involvement beyond the SOC. Provide a factual, timestamped summary of findings. Do not draw conclusions about intent — report what the data shows. Legal will determine next steps.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Restore access only after legal sign-off",
+      "detail": "Do not reinstate the user's access until HR, legal, and security have all confirmed it is appropriate. If the user has left the organisation, decommission all credentials and access tokens immediately.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Notify stakeholders and assess regulatory obligations",
+      "detail": "If PII, financial records, or other regulated data was confirmed exfiltrated, legal and compliance must assess GDPR (72-hour notification), HIPAA, PCI-DSS, or other applicable reporting requirements.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Conduct a post-incident access review",
+      "detail": "Review access controls across all sensitive shares and systems the user had access to. Apply least-privilege corrections. Update the insider threat detection rules and monitoring scope based on the TTPs observed.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<10 minutes from data transfer"
+    },
+    {
+      "name": "Investigation Time",
+      "target": "<1 hour from alert"
+    },
+    {
+      "name": "Containment Time",
+      "target": "<30 minutes"
+    },
+    {
+      "name": "Regulatory Response Time",
+      "target": "Within required legal timeframe (e.g., 72 hours)"
+    }
+  ]
+}

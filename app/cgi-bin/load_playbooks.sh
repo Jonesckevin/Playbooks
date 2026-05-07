@@ -9,7 +9,7 @@ echo "Access-Control-Allow-Origin: *"
 echo ""
 
 # If no files exist, return empty array
-if [ ! -d "$PLAYBOOKS_DIR" ] || [ -z "$(ls "$PLAYBOOKS_DIR"/*.json 2>/dev/null)" ]; then
+if [ ! -d "$PLAYBOOKS_DIR" ] || [ -z "$(find "$PLAYBOOKS_DIR" -maxdepth 2 -name '*.json' 2>/dev/null | head -1)" ]; then
     echo "[]"
     exit 0
 fi
@@ -17,7 +17,7 @@ fi
 # Concatenate all JSON files into a valid array
 echo "["
 FIRST=1
-for FILE in "$PLAYBOOKS_DIR"/*.json; do
+for FILE in $(find "$PLAYBOOKS_DIR" -maxdepth 2 -name '*.json' | sort); do
     [ -f "$FILE" ] || continue
     if [ $FIRST -eq 1 ]; then
         FIRST=0

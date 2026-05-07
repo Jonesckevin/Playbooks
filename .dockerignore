@@ -1,0 +1,8 @@
+# Exclude files that don't belong in the Docker image
+.git
+.gitignore
+.dockerignore
+README.md
+*.tar
+*.tar.gz
+.vscode/

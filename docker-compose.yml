@@ -10,7 +10,7 @@ services:
       - playbook-data:/playbooks
     labels:
       - "com.soc.description=SOC IR Playbook Library"
-      - "com.soc.version=3.0"
+      - "com.soc.version=4.0"
 
 volumes:
   playbook-data:

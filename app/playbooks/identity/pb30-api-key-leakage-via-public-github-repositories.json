@@ -1,0 +1,202 @@
+{
+  "id": "pb30",
+  "num": 30,
+  "name": "API Key Leakage via Public GitHub Repositories",
+  "fullName": "API Key Leakage via Public GitHub Repositories",
+  "type": "Credential Exposure – Source Code Leak",
+  "severity": "Critical (especially for cloud or production credentials)",
+  "priority": "Critical",
+  "detection": "GitHub Secret Scanning Alerts, TruffleHog, Gitleaks, Cloud Provider",
+  "scenario": "A developer accidentally commits and pushes API keys, cloud credentials or other secrets to a public GitHub repository. These secrets can be harvested by attackers (including bots that monitor GitHub) and used to access critical systems, cloud resources or third-party APIs.",
+  "mitre": "T1552.001, T1087, T1528",
+  "tools": "GitHub Advanced Security (secret scanning); TruffleHog, Gitleaks, GitRob; HashiCorp Vault, AWS Secrets Manager, Azure Key Vault; SIEM (e.g., Sentinel, Splunk) and threat detection systems; Version control auditing (e.g., Git log parsing, commit reviewers)",
+  "sev": "critical",
+  "cat": "Identity",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Identify the leaked secret type and its access scope",
+      "detail": "Determine exactly what type of credential was exposed: AWS access key (AKIA prefix), GitHub PAT (ghp_), GitLab token (glpat-), Stripe key (sk_live_), or other. The type determines the blast radius — a cloud admin key is far more severe than a read-only API key.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Check cloud and API provider logs for unauthorised usage of the leaked key",
+      "detail": "Look for API calls using the compromised key from IPs outside your organisation's ranges, especially in the period after the commit was pushed. Most automated bots that harvest GitHub secrets start exploiting keys within minutes of publication.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=cloudtrail userIdentity.accessKeyId=[leaked_key_id] | stats count by src_ip, eventName | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Determine the public exposure window",
+      "detail": "Check the git commit history to find exactly when the secret was first committed and when it was removed. Subtract to get the exposure duration. Check if the repo was public during this window — if it was, assume the secret was harvested.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Immediately revoke the exposed credential at the provider",
+      "detail": "Revoke the key at its source before doing anything else — this is the single most important action. AWS: deactivate in IAM. GitHub: revoke in Developer Settings. Stripe: roll in Dashboard. Do this within minutes of detection.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Remove the secret from git history — it is not enough to delete the file",
+      "detail": "Deleting the file in a new commit does not remove it from git history — the secret remains accessible in all previous commits. Use git-filter-repo or BFG Repo Cleaner to purge the secret from the full commit history, then force-push.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Replace exposed keys with new ones: Generate and distribute new keys securely via vault or secret manager",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Audit cloud/API logs: Look for signs of abuse using the leaked key during its exposure period",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Validate GitHub repo hygiene: Review commit history and remove any other sensitive information",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Block repo or mark private: If it still contains risks or needs re-evaluation",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Restore service access using new secrets: Confirm integrations and pipelines are working with rotated credentials",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Re-enable affected users or systems: Once no unauthorised access is detected",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor for abuse: Set alerts on any suspicious use of revoked credentials across services",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Document impact and confirm clean repo state: Ensure dev teams comply with updated policies",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Revocation Time",
+      "target": "<15 minutes from detection"
+    },
+    {
+      "name": "Commit Cleanup Time",
+      "target": "<1 hour for critical secrets"
+    },
+    {
+      "name": "Secret Replacement & Reintegration",
+      "target": "<4 hours for production use"
+    },
+    {
+      "name": "Exposure Window Analysis Completion",
+      "target": "Within 24 hours"
+    },
+    {
+      "name": "Developer Acknowledgement of Policy",
+      "target": "100% of involved devs within 2 business days"
+    }
+  ]
+}

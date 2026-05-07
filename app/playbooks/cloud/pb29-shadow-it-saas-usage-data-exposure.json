@@ -1,0 +1,178 @@
+{
+  "id": "pb29",
+  "num": 29,
+  "name": "Shadow IT SaaS Usage & Data Exposure",
+  "fullName": "Shadow IT SaaS Usage & Data Exposure",
+  "type": "Policy Violation – Unauthorised SaaS Usage",
+  "severity": "Medium to High (depending on the type and sensitivity of data",
+  "priority": "involved)",
+  "detection": "High",
+  "scenario": "An employee or team uses an unapproved SaaS application (e.g., personal Google Drive, Dropbox, Notion, ChatGPT) for work-related purposes, transferring corporate data without security oversight. This can result in unauthorised data exposure, regulatory breaches or insider misuse.",
+  "mitre": "T1087.003, T1537, T1213",
+  "tools": "CASB (e.g., Microsoft Defender for Cloud Apps, Netskope, Skyhigh Security); DLP (e.g., Forcepoint, Microsoft Purview, Symantec DLP); SIEM (e.g., Splunk, Sentinel); Web Proxies and NGFW (e.g., Zscaler, Palo Alto, Fortinet); Endpoint Monitoring Tools (e.g., CrowdStrike, Tanium); SaaS Access Governance",
+  "sev": "high",
+  "cat": "Cloud",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Identify the specific unapproved SaaS application and user",
+      "detail": "Determine which SaaS app was used (personal Google Drive, Notion, Dropbox, ChatGPT, Airtable), who was using it, how long it has been in use, and what data was transferred to it. CASB provides the most detailed view of this activity.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy dest_host IN (\"*.notion.so\",\"*.airtable.com\",\"*.dropbox.com\",\"chat.openai.com\",\"*.monday.com\") | stats sum(bytes_out) as out by src_ip, dest_host | sort -out",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Assess what corporate data was uploaded to the unapproved service",
+      "detail": "Check the content or file types being uploaded (document names visible in proxy logs, MIME types, file sizes). Determine if regulated data (PII, financial records, source code, customer data) was involved.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy dest_host=[shadow_saas_domain] method=POST | stats sum(bytes_out) as out, count by src_ip | sort -out",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Block the unapproved SaaS app at the proxy and CASB level",
+      "detail": "Apply a block policy for the specific application domain. For commonly abused services, apply a category-level block (personal cloud storage, AI tools) while ensuring approved corporate alternatives remain accessible.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove company data from unapproved platforms: Where feasible, contact the vendor or request user deletion",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Revoke SaaS OAuth permissions: From user or enterprise accounts integrated with unapproved services",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Tighten app controls: Configure CASB to auto-block newly discovered unapproved apps in high-risk categories",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Remove access to shared data from external parties: If data was shared via link or collaboration features",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Reinstate user access under monitoring: After risk is remediated and policy is acknowledged",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor future SaaS usage: Apply stricter controls and alerts on repeat violations",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Validate that no further data copies exist: Search endpoints and cloud storage for duplicates",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Implement formal app request workflows: Make it easier for users to request approval of new tools securely",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<5 minutes from data upload or SaaS access"
+    },
+    {
+      "name": "SaaS Access Block Time",
+      "target": "<15 minutes from alert"
+    },
+    {
+      "name": "Data Removal Completion",
+      "target": "Within 24 hours for public or third-party exposure"
+    },
+    {
+      "name": "User Education Completion",
+      "target": "100% of involved users re-briefed within 3 business days"
+    },
+    {
+      "name": "Policy Review Update",
+      "target": "Within 7 days to incorporate lessons learned"
+    }
+  ]
+}

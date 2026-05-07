@@ -1,0 +1,133 @@
+{
+  "id": "pb09",
+  "num": 9,
+  "name": "Unauthorised Privilege Escalation",
+  "fullName": "Unauthorised Privilege Escalation",
+  "type": "Access Control Violation / Privilege Misuse",
+  "severity": "High to Critical",
+  "priority": "Critical",
+  "detection": "SIEM, EDR, IAM logs, Sysmon, User Behaviour Analytics (UBA), Audit",
+  "scenario": "An attacker, either through a vulnerability, misconfiguration or stolen credentials, escalates privileges from a low-privilege user to an administrative or root-level account, potentially compromising critical systems or accessing sensitive data.",
+  "mitre": "T1068, T1548, T1078",
+  "tools": "SIEM (e.g., Splunk, Sentinel, QRadar); EDR (e.g., CrowdStrike, Cortex XDR, Microsoft Defender for Endpoint); IAM platforms (e.g., Azure AD, Okta, LDAP, Active Directory); Windows Event Logs (Security logs, Sysmon, GPO auditing); Linux audit tools (auditd, sudo logs); Threat Detection Rules (Sigma, K",
+  "sev": "critical",
+  "cat": "Identity",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Identify privilege escalation events in audit logs",
+      "detail": "Look for Windows Event IDs 4670 (permissions changed), 4672 (special privileges assigned), 4728/4732/4756 (member added to privileged group), or Linux sudo logs and auditd records showing unexpected privilege use. Correlate with the alert time.",
+      "queries": {
+        "splunk": "index=network sourcetype=wineventlog EventCode IN (4670,4672,4728,4732,4756,4673) | table _time, user, target_user, group_name, privilege | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT * FROM Artifact.Windows.EventLogs.SecurityEventLogParser() WHERE EventID IN (4670, 4672, 4728, 4732, 4756) ORDER BY TimeCreated DESC LIMIT 100",
+        "carbon_black": "event_type:privilege_escalation OR (event_type:group_membership AND group_name:*admin*) | stats count by timestamp, username, hostname"
+      }
+    },
+    {
+      "title": "Correlate with user's normal behaviour baseline",
+      "detail": "Check whether the user account normally performs admin actions or accesses privileged resources. A standard domain user suddenly receiving special privileges or accessing admin shares is highly anomalous.",
+      "queries": {
+        "splunk": "index=network sourcetype=auth user=[suspect_user] | stats count by action, dest_ip, dest_port | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Analyse the process execution chain",
+      "detail": "Look for unusual parent-child process relationships that indicate exploitation — e.g., cmd.exe or PowerShell spawned from Outlook, IIS worker process, or a browser. These patterns indicate local privilege escalation via a vulnerable application.",
+      "queries": {
+        "splunk": "index=endpoint sourcetype=sysmon EventCode=1 user=[suspect_user] | table _time, host, ParentImage, Image, CommandLine | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Child.Pid, Child.Name, Child.CommandLine, Parent.Name AS ParentName, Child.CreateTime FROM pslist() AS Child JOIN pslist() AS Parent ON Child.Ppid = Parent.Pid WHERE Parent.Name IN ('outlook.exe', 'chrome.exe', 'firefox.exe', 'iexplore.exe', 'w3wp.exe') AND Child.Name IN ('cmd.exe', 'powershell.exe')",
+        "carbon_black": "process_name:cmd.exe OR process_name:powershell.exe | where parent_name IN (outlook.exe, chrome.exe, firefox.exe, iexplore.exe, w3wp.exe) | fields process_name, parent_name, cmdline, timestamp"
+      }
+    },
+    {
+      "title": "Check for new persistence mechanisms created with elevated rights",
+      "detail": "After escalating, attackers frequently establish persistence — new scheduled tasks, services, or registry run keys created under a privileged context. Look for these created in the same time window as the escalation event.",
+      "queries": {
+        "splunk": "index=endpoint sourcetype=wineventlog EventCode IN (4698,4702,7045) | table _time, host, user, TaskName, ServiceName | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
+        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Disable the affected account and terminate elevated sessions",
+      "detail": "Immediately disable the account if elevation was unauthorised. Kill any suspicious processes (PowerShell, cmd, mshta) running under the escalated context. Coordinate with the identity team — do not delete the account as it is evidence.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Revert all permission changes made during the session",
+      "detail": "Remove the account from any groups it was added to, revoke any elevated access tokens, and reverse any permission grants made. Document every change reversed with timestamps.",
+      "queries": {
+        "splunk": "index=network sourcetype=wineventlog EventCode IN (4729,4733,4757) user=[suspect_user] | table _time, user, target_user, group_name | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
+        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Clean all persistence mechanisms created with elevated rights",
+      "detail": "Remove scheduled tasks, registry run key entries, new services, and any startup items created by the attacker. Verify removal by re-running the detection queries — any recurrence indicates the attacker has a secondary persistence channel.",
+      "queries": {
+        "splunk": "index=endpoint sourcetype=wineventlog EventCode=4699 | table _time, host, user, TaskName | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
+        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+      }
+    },
+    {
+      "title": "Patch the exploited privilege escalation vulnerability",
+      "detail": "If escalation used a known CVE (local privilege escalation, kernel exploit, misconfigured service), apply the patch urgently across all affected systems. If no patch exists, apply compensating controls (restrict vulnerable service, add monitoring).",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Conduct a full entitlement review across privileged accounts",
+      "detail": "After the incident, review all admin group memberships, privileged service accounts, and scheduled tasks across the environment. Apply least-privilege corrections. This is commonly where the root cause of escalation (overly permissive configuration) is found.",
+      "queries": {
+        "splunk": "index=network sourcetype=wineventlog EventCode=4672 | stats dc(user) as count, values(user) as admins | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
+        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+      }
+    }
+  ],
+  "metrics": []
+}

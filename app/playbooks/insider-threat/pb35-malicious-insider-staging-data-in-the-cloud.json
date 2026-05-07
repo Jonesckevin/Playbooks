@@ -1,0 +1,178 @@
+{
+  "id": "pb35",
+  "num": 35,
+  "name": "Malicious Insider Staging Data in the Cloud",
+  "fullName": "Malicious Insider Staging Data in the Cloud",
+  "type": "Insider Threat – Data Staging / Exfiltration",
+  "severity": "High to Critical (based on data sensitivity and exposure level)",
+  "priority": "Critical",
+  "detection": "DLP, CASB, SIEM, Proxy Logs, Endpoint Agents, User Reports, Insider",
+  "scenario": "A trusted user within the organisation abuses their access to sensitive data (e.g., PII, source code, financials) and begins uploading it to unapproved cloud platforms (e.g., personal Google Drive, Dropbox, Mega, OneDrive) for exfiltration. This may precede resignation, whistleblowing or corporate espionage.",
+  "mitre": "T1537, T1081, T1567.002",
+  "tools": "DLP (e.g., Microsoft Purview, Forcepoint, Symantec DLP); CASB (e.g., Netskope, Microsoft Defender for Cloud Apps); UEBA/Insider Threat Platforms (e.g., Splunk UBA, Exabeam, Varonis); SIEM (e.g., Sentinel, Splunk); Endpoint Monitoring (e.g., CrowdStrike, Trellix, Tanium); Proxy and NGFW (e.g., Zscale",
+  "sev": "critical",
+  "cat": "Insider Threat",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Detect bulk file staging to unapproved cloud destinations",
+      "detail": "Look for an internal user accessing unusually large volumes of files and uploading them to personal cloud storage (Google Drive, Dropbox, Mega, OneDrive personal). Watch for archiving or compression activity (zip, tar, 7z) preceding the upload.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy src_ip=[suspect_workstation] dest_host IN (\"*.dropbox.com\",\"*.mega.nz\",\"drive.google.com\",\"*.onedrive.com\") | stats sum(bytes_out) as out by dest_host | sort -out",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Identify the data source and content accessed before staging",
+      "detail": "Trace what the user accessed before initiating the upload: file shares, databases, email archives, or cloud repositories. Determine the data classification of accessed files to assess the severity of the potential exfiltration.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall src_ip=[suspect_workstation] dest_port IN (445,139,443) | stats count by dest_ip, dest_port | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Block outbound cloud upload channels and preserve endpoint evidence",
+      "detail": "Apply CASB or proxy rules to block uploads to personal cloud storage. If the staging is confirmed malicious, isolate the endpoint to prevent further uploads while preserving it for forensic analysis. Coordinate with HR and legal before taking action.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove access to sensitive systems: Revoke elevated privileges and remove from sensitive groups or shares",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Retrieve or delete staged data: If stored on corporate device or retrievable from personal cloud (with legal support)",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Reset credentials and tokens: Especially if user had API access or was using automation tools",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Disable shadow cloud accounts: Prevent further access or data sync from corporate systems",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Reassign critical duties: If employee was in a privileged role or part of a handover",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor for follow-up exfiltration attempts: Use enhanced logging for user accounts or similar profiles",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Review audit logs across systems: Ensure no lateral activity or additional data transfers occurred",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Resume normal operations: Once incident scope and risk are under control",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<5 minutes from data upload"
+    },
+    {
+      "name": "Account Restriction Time",
+      "target": "<15 minutes from alert"
+    },
+    {
+      "name": "Data Recovery / Containment Time",
+      "target": "<24 hours"
+    },
+    {
+      "name": "Forensic Analysis Completion",
+      "target": "Within 48 hours"
+    },
+    {
+      "name": "Insider Threat Playbook Update",
+      "target": "Within 3 business days"
+    }
+  ]
+}

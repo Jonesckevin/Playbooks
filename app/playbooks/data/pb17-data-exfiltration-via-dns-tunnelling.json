@@ -1,0 +1,214 @@
+{
+  "id": "pb17",
+  "num": 17,
+  "name": "Data Exfiltration via DNS Tunnelling",
+  "fullName": "Data Exfiltration via DNS Tunnelling",
+  "type": "Covert Channel – Data Exfiltration",
+  "severity": "High to Critical (especially if sensitive data is confirmed to be",
+  "priority": "exfiltrated)",
+  "detection": "Critical",
+  "scenario": "An attacker uses DNS as a communication channel to exfiltrate data or maintain command and control. DNS tunnelling disguises malicious payloads or stolen data inside DNS queries, bypassing traditional detection since DNS traffic is usually allowed.",
+  "mitre": "T1048.003, T1071.004, T1568.002",
+  "tools": "DNS Logging Platforms (e.g., Infoblox, Bind logs, Windows DNS logs); NDR (e.g., Corelight/Zeek, Darktrace, ExtraHop); SIEM (e.g., Splunk, Sentinel, QRadar); EDR (e.g., CrowdStrike, Cortex XDR); Threat Intelligence (e.g., Recorded Future, MISP, AbuseIPDB); Firewall and proxy logs",
+  "sev": "critical",
+  "cat": "Data",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Detect high-entropy subdomain queries indicating encoded data",
+      "detail": "DNS tunnelling encodes data as base32/base64 in subdomain labels — these appear as long, alphanumeric, semantically meaningless strings. Look for query lengths over 50 characters, high query volume to a single domain, and abuse of TXT or NULL record types.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns | stats count avg(len(query)) as avg_qlen values(record_type) as rtypes by src_ip, query | where avg_qlen > 50 OR count > 300 | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Analyse subdomain entropy and pattern regularity",
+      "detail": "Legitimate traffic has readable subdomain labels. Tunnel tools produce fixed-length, alphanumeric-only labels that repeat at regular intervals (beaconing). The regularity of query timing is itself an indicator.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns | rex field=query \"^(?<sub>[^.]+)\\\\.\" | eval sub_len=len(sub) | stats count avg(sub_len) as avg_len by query | where avg_len > 30 | sort -avg_len",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Correlate DNS activity with outbound network flow",
+      "detail": "After DNS resolution, tunnelling tools often fall back to direct TCP/UDP connections to the same destination on non-standard ports. Look for connections from the same host to the resolved IP on unusual ports shortly after the DNS queries.",
+      "queries": {
+        "splunk": "index=network (sourcetype=firewall OR sourcetype=netflow) src_ip=[suspect_ip] | stats count by dest_ip, dest_port | where dest_port NOT IN (80,443,53,22) | sort -count",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Determine scope — other hosts using the same tunnel domain",
+      "detail": "Find all internal hosts that have queried the suspect tunnelling domain. Any host that received a successful response is a potential infection candidate.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns query=\"*[suspect_domain]*\" | stats dc(src_ip) as hosts values(src_ip) as host_list",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Block the tunnel domain at the DNS resolver and firewall",
+      "detail": "Add the tunnelling domain to your DNS blocklist (return NXDOMAIN) and apply an outbound firewall rule blocking all traffic to the resolved IPs. Verify the block is in place and monitor for the same host attempting to use alternative C2 domains.",
+      "queries": {
+        "splunk": "index=network sourcetype=dns query=\"*[suspect_domain]*\" earliest=-15m | stats count by src_ip",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Isolate the originating host from the network",
+      "detail": "Network-isolate the host generating the tunnel traffic. If host access is limited, apply firewall rules to block all non-essential outbound traffic from that IP while the investigation continues.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove tunnelling tools or malware: From endpoints using EDR or forensic analysis",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Patch exploited vulnerabilities: If attacker gained access through known weaknesses",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Clean persistence mechanisms: Check for scheduled tasks, registry changes or startup scripts",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Review DNS configurations: Ensure no external DNS bypasses exist on endpoints or servers",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Restore network connectivity: Once system is verified to be clean and containment controls are in place",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Resume DNS services: Enforce forwarding through secure DNS infrastructure with inspection",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Revalidate affected systems: Perform full scan and traffic monitoring on previously infected hosts",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Update threat detection rules: Enhance SIEM, NDR and firewall rules with new indicators and patterns",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<15 minutes from abnormal DNS pattern"
+    },
+    {
+      "name": "Containment Time",
+      "target": "<30 minutes from confirmation"
+    },
+    {
+      "name": "Data Loss Impact Report",
+      "target": "Within 48 hours (or regulatory timeframe)"
+    },
+    {
+      "name": "DNS Logging Coverage",
+      "target": "100% of egress DNS activity logged and monitored"
+    },
+    {
+      "name": "Incident Review Completion",
+      "target": "Within 72 hours post-resolution"
+    }
+  ]
+}

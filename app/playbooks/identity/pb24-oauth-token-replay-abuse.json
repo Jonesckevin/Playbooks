@@ -1,0 +1,178 @@
+{
+  "id": "pb24",
+  "num": 24,
+  "name": "OAuth Token Replay Abuse",
+  "fullName": "OAuth Token Replay Abuse",
+  "type": "Identity Compromise – Token Abuse",
+  "severity": "High to Critical (depending on the scope and privilege of the token)",
+  "priority": "Critical",
+  "detection": "SIEM, Cloud Audit Logs, API Gateway Logs, Identity Provider Logs (e.g.,",
+  "scenario": "An attacker obtains a valid OAuth access token (e.g., via phishing, token theft or insecure storage) and reuses it to access APIs, web applications or cloud services as the victim — bypassing MFA and other login protections since the token is already trusted.",
+  "mitre": "T1528, T1078.004, T1550.003",
+  "tools": "Identity Providers (e.g., Okta, Azure AD, Google Workspace); SIEM (e.g., Sentinel, Splunk, QRadar); CASB (e.g., Netskope, Microsoft Defender for Cloud Apps); API Security Tools (e.g., Salt Security, Noname, Imperva API Security); Cloud Audit Logs (e.g., AWS CloudTrail, Azure Sign-in logs, GCP Admin ",
+  "sev": "critical",
+  "cat": "Identity",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Detect anomalous token usage — impossible travel or new device",
+      "detail": "OAuth token replay appears as the same token being used from a new IP, new geographic location, or new device fingerprint — without a corresponding new login event. Look for access token usage that doesn't match the user's current session IP.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=azure_ad tokenType=AccessToken | stats dc(src_ip) as ip_count values(src_ip) as sources by user, token_id | where ip_count > 1",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Correlate token activity with API access scope",
+      "detail": "Check what APIs and resources the replayed token was used to access. A replayed token with broad scopes (Mail.ReadWrite, Files.ReadWrite.All) represents a severe risk. Document all actions taken with the stolen token.",
+      "queries": {
+        "splunk": "index=cloud sourcetype=o365 token_id=[stolen_token] | stats count by Operation, user, ClientIPAddress | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
+        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Revoke the compromised token and all related tokens immediately",
+      "detail": "Invalidate the specific access token and its associated refresh token via the identity provider. Force a full sign-out for the affected user across all devices. In Azure AD: Revoke-AzureADUserAllRefreshToken.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Rotate credentials and secrets: Especially for third-party applications or APIs tied to the same account",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Audit and remove malicious app consents: Check for OAuth apps granted by the user that may be controlled by the attacker",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Tighten app permission scopes: Restrict apps to only request minimum access necessary (principle of least privilege)",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Apply security controls to apps: Require app verification or tenant-level consent approval for future apps",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Reinstate user account: After confirming user identity and account integrity",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Monitor token activity postrecovery: Ensure new tokens are being used only from trusted locations and devices",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Revalidate app and API access: Confirm legitimate session behaviour across critical services",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Resume operations: After confirming full containment and credential hygiene",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<10 minutes from abnormal token use"
+    },
+    {
+      "name": "Token Revocation Time",
+      "target": "<15 minutes after confirmation"
+    },
+    {
+      "name": "Account Risk Mitigation Time",
+      "target": "<1 hour"
+    },
+    {
+      "name": "OAuth App Audit Completion",
+      "target": "100% of consents reviewed within 24 hours"
+    },
+    {
+      "name": "Post-Incident Monitoring Period",
+      "target": "Minimum 7 days with enhanced visibility"
+    }
+  ]
+}

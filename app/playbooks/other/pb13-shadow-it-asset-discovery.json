@@ -1,0 +1,178 @@
+{
+  "id": "pb13",
+  "num": 13,
+  "name": "Shadow IT Asset Discovery",
+  "fullName": "Shadow IT Asset Discovery",
+  "type": "Asset Management / Policy Violation",
+  "severity": "Medium to High (based on data accessed or exposed)",
+  "priority": "High if linked to sensitive systems or users",
+  "detection": "CASB, EDR, SIEM, Asset Discovery Tools, Proxy Logs, DNS Logs,",
+  "scenario": "A previously unknown or unauthorised IT asset (e.g., cloud service, SaaS application, personal laptop, rogue Wi-Fi access point or unapproved web app) is discovered operating within or connected to the corporate environment, potentially bypassing security controls and increasing risk exposure.",
+  "mitre": "T1584, T1087.001, T1078",
+  "tools": "CASB (e.g., Netskope, Microsoft Defender for Cloud Apps, McAfee MVISION); SIEM (e.g., Splunk, Sentinel, QRadar); Endpoint tools (e.g., CrowdStrike, Cortex XDR); Network scanners (e.g., Nmap, Qualys, Nessus, Fing); DNS/Proxy logs and analytics (e.g., Cisco Umbrella, Squid, Zscaler); CMDB / IT asset m",
+  "sev": "high",
+  "cat": "Other",
+  "source": "library",
+  "detSteps": [
+    {
+      "title": "Investigate the specific unapproved service or device detected",
+      "detail": "Determine what the shadow IT asset is (cloud service, SaaS app, personal device, rogue Wi-Fi AP), who is using it, what data it has been used to access or transfer, and how long it has been active in the environment.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy dest_host IN (\"*.notion.so\",\"*.airtable.com\",\"*.monday.com\",\"*.trello.com\",\"*.miro.com\") | stats sum(bytes_out) as out by src_ip, dest_host | sort -out",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    },
+    {
+      "title": "Assess risk: what data has been accessed via the shadow asset",
+      "detail": "Determine whether corporate data (files, emails, credentials, customer data) was accessed through or stored on the unapproved asset. If the asset has been used to process regulated data, assess compliance implications immediately.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall src_ip=[suspect_host] NOT dest_ip IN (\"10.*\",\"172.16.*\",\"192.168.*\") | stats count by dest_ip, dest_port | sort _time",
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Block the unauthorised service or device at the network boundary",
+      "detail": "Apply DNS, proxy, or firewall blocks for the unapproved service domain or device IP. If it's a rogue physical device (AP, hub), coordinate with network team to disable the switchport.",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove unapproved software: From endpoints, servers or internal systems",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Decommission rogue infrastructure: Shutdown VMs, containers, cloud services or local hosts not in inventory",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Clean credentials: If passwords or tokens were shared with unauthorised systems",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Update asset discovery signatures: Add new detection rules for similar tools or configurations in future scans",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Onboard approved replacements: Help users move to authorised tools or services",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Restore normal access: Only after all affected systems are validated and secured",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Update asset inventory: Include newly discovered legitimate systems under official tracking",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    },
+    {
+      "title": "Revalidate user roles: Ensure no privilege creep or policy bypass remains active",
+      "detail": "",
+      "queries": {
+        "splunk": null,
+        "kql": null,
+        "qradar": null,
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "Detection Time",
+      "target": "<1 day from introduction of asset"
+    },
+    {
+      "name": "Containment Time",
+      "target": "<4 hours from confirmation"
+    },
+    {
+      "name": "Asset Inventory Update Time",
+      "target": "Within 24 hours post-incident"
+    },
+    {
+      "name": "User Re-education Completion",
+      "target": "100% of involved users retrained within 7 days"
+    },
+    {
+      "name": "Policy Compliance Enforcement",
+      "target": "Confirmed for similar cases during next audit cycle"
+    }
+  ]
+}
