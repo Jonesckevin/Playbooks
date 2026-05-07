@@ -23,7 +23,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
-        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+        "carbon_black": "(process_name:powershell.exe OR process_name:cmd.exe OR process_name:wscript.exe OR process_name:cscript.exe OR process_name:mshta.exe OR process_name:rundll32.exe) AND NOT (parent_name:services.exe AND process_name:cmd.exe)",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -34,8 +35,9 @@
         "kql": null,
         "qradar": null,
         "sigma": null,
-        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
-        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,443,8080,8443) AND Name =~ '(?i)(powershell|cmd|wscript|cscript|rundll32|mshta|curl|wget)' ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_count:[10 TO *] AND NOT (process_name:chrome.exe OR process_name:msedge.exe OR process_name:firefox.exe OR process_name:outlook.exe OR process_name:teams.exe OR process_name:OneDrive.exe)",
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;curl.exe;rclone.exe</Image><DestinationPort condition=\"is any\">53;80;443;8080;8443</DestinationPort></NetworkConnect>"
       }
     }
   ],
@@ -49,7 +51,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     }
   ],
@@ -63,7 +66,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -75,7 +79,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>"
       }
     },
     {
@@ -87,7 +92,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -99,7 +105,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     }
   ],
@@ -113,7 +120,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<FileCreate onmatch=\"include\"><TargetFilename condition=\"contains any\">.locked;.encrypted;.crypt;README</TargetFilename></FileCreate>"
       }
     },
     {
@@ -125,7 +133,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<CreateRemoteThread onmatch=\"include\"><StartModule condition=\"contains any\">kernel32.dll;ntdll.dll</StartModule></CreateRemoteThread>"
       }
     },
     {
@@ -137,7 +146,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -149,7 +159,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     }
   ],
@@ -176,3 +187,4 @@
     }
   ]
 }
+

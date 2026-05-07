@@ -112,6 +112,7 @@ body{font-family:var(--sans);background:var(--bg2);color:var(--text);line-height
 .step-q-label--kql{background:var(--blue-bg);color:var(--blue-t)}
 .step-q-label--qradar{background:var(--teal-bg);color:var(--teal-t)}
 .step-q-label--sigma{background:var(--purple-bg);color:var(--purple-t)}
+.step-q-label--sysmon{background:var(--bg2);color:var(--text2);border:1px solid var(--border)}
 .step-q-label--velociraptor{background:var(--green-bg);color:var(--green-t)}
 .step-q-label--carbon_black{background:var(--red-bg);color:var(--red-t)}
 .step-q--empty{opacity:.65}
@@ -156,6 +157,7 @@ table.g tr:last-child td{border-bottom:none}
 .step-query-label--kql{background:var(--blue-bg);color:var(--blue-t)}
 .step-query-label--qradar{background:var(--teal-bg);color:var(--teal-t)}
 .step-query-label--sigma{background:var(--purple-bg);color:var(--purple-t)}
+.step-query-label--sysmon{background:var(--bg2);color:var(--text2);border:1px solid var(--border)}
 .step-query-label--velociraptor{background:var(--green-bg);color:var(--green-t)}
 .step-query-label--carbon_black{background:var(--red-bg);color:var(--red-t)}
 .step-query-input{font-size:11px;font-family:var(--mono);padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text);resize:vertical;outline:none;width:100%}

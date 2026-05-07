@@ -22,8 +22,9 @@
         "kql": null,
         "qradar": null,
         "sigma": null,
-        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
-        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,443,8080,8443) AND Name =~ '(?i)(powershell|cmd|wscript|cscript|rundll32|mshta|curl|wget)' ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_count:[10 TO *] AND NOT (process_name:chrome.exe OR process_name:msedge.exe OR process_name:firefox.exe OR process_name:outlook.exe OR process_name:teams.exe OR process_name:OneDrive.exe)",
+        "sysmon": "<RegistryEvent onmatch=\"include\"><TargetObject condition=\"contains any\">\\\\Run\\\\;\\\\RunOnce\\\\;\\\\Policies\\\\Explorer\\\\Run</TargetObject></RegistryEvent>"
       }
     },
     {
@@ -34,8 +35,9 @@
         "kql": null,
         "qradar": null,
         "sigma": null,
-        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
-        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,443,8080,8443) AND Name =~ '(?i)(powershell|cmd|wscript|cscript|rundll32|mshta|curl|wget)' ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_count:[10 TO *] AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:curl.exe OR process_name:wget.exe OR process_name:rclone.exe OR process_name:7z.exe)",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -46,8 +48,9 @@
         "kql": null,
         "qradar": null,
         "sigma": null,
-        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
-        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,443,8080,8443) AND Name =~ '(?i)(powershell|cmd|wscript|cscript|rundll32|mshta|curl|wget)' ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_count:[10 TO *] AND NOT (process_name:chrome.exe OR process_name:msedge.exe OR process_name:firefox.exe OR process_name:outlook.exe OR process_name:teams.exe OR process_name:OneDrive.exe)",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     }
   ],
@@ -61,7 +64,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"end with\">powershell.exe</Image><DestinationPort condition=\"is any\">135;139;445;3389</DestinationPort></NetworkConnect>"
       }
     },
     {
@@ -72,8 +76,9 @@
         "kql": null,
         "qradar": null,
         "sigma": null,
-        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
-        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,443,8080,8443) AND Name =~ '(?i)(powershell|cmd|wscript|cscript|rundll32|mshta|curl|wget)' ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_count:[10 TO *] AND NOT (process_name:chrome.exe OR process_name:msedge.exe OR process_name:firefox.exe OR process_name:outlook.exe OR process_name:teams.exe OR process_name:OneDrive.exe)",
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;curl.exe;rclone.exe</Image><DestinationPort condition=\"is any\">53;80;443;8080;8443</DestinationPort></NetworkConnect>"
       }
     },
     {
@@ -84,8 +89,9 @@
         "kql": null,
         "qradar": null,
         "sigma": null,
-        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
-        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (135,139,445,3389) AND Name =~ '(?i)(powershell|cmd|wmic|psexec|rundll32)' ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_count:[10 TO *] AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:wscript.exe OR process_name:cscript.exe OR process_name:rundll32.exe) AND NOT (process_name:chrome.exe OR process_name:msedge.exe OR process_name:firefox.exe OR process_name:outlook.exe OR process_name:teams.exe)",
+        "sysmon": "<RegistryEvent onmatch=\"include\"><TargetObject condition=\"contains any\">\\\\Run\\\\;\\\\RunOnce\\\\;\\\\Policies\\\\Explorer\\\\Run</TargetObject></RegistryEvent>"
       }
     }
   ],
@@ -99,7 +105,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<RegistryEvent onmatch=\"include\"><TargetObject condition=\"contains any\">\\\\Run\\\\;\\\\RunOnce\\\\;\\\\Policies\\\\Explorer\\\\Run</TargetObject></RegistryEvent>"
       }
     },
     {
@@ -111,7 +118,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -122,8 +130,9 @@
         "kql": null,
         "qradar": null,
         "sigma": null,
-        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
-        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,443,8080,8443) AND Name =~ '(?i)(powershell|cmd|wscript|cscript|rundll32|mshta|curl|wget)' ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_count:[10 TO *] AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:wscript.exe OR process_name:cscript.exe OR process_name:rundll32.exe) AND NOT (process_name:chrome.exe OR process_name:msedge.exe OR process_name:firefox.exe OR process_name:outlook.exe OR process_name:teams.exe)",
+        "sysmon": "<RegistryEvent onmatch=\"include\"><TargetObject condition=\"contains any\">\\\\Run\\\\;\\\\RunOnce\\\\;\\\\Policies\\\\Explorer\\\\Run</TargetObject></RegistryEvent>"
       }
     }
   ],
@@ -137,7 +146,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -149,7 +159,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     }
   ],
@@ -176,3 +187,4 @@
     }
   ]
 }
+

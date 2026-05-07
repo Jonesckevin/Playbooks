@@ -23,7 +23,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": "SELECT * FROM Artifact.Windows.EventLogs.SecurityEventLogParser() WHERE EventID IN (4670, 4672, 4728, 4732, 4756) ORDER BY TimeCreated DESC LIMIT 100",
-        "carbon_black": "event_type:privilege_escalation OR (event_type:group_membership AND group_name:*admin*) | stats count by timestamp, username, hostname"
+        "carbon_black": "(process_name:whoami.exe OR process_name:net.exe OR process_name:net1.exe OR process_name:wmic.exe) AND (cmdline:*localgroup* OR cmdline:*administrators* OR cmdline:*/add*)",
+        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>"
       }
     },
     {
@@ -34,8 +35,9 @@
         "kql": null,
         "qradar": null,
         "sigma": null,
-        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
-        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,443,8080,8443) AND Name =~ '(?i)(powershell|cmd|wscript|cscript|rundll32|mshta|curl|wget)' ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_count:[10 TO *] AND NOT (process_name:chrome.exe OR process_name:msedge.exe OR process_name:firefox.exe OR process_name:outlook.exe OR process_name:teams.exe OR process_name:OneDrive.exe)",
+        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>"
       }
     },
     {
@@ -47,7 +49,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": "SELECT Child.Pid, Child.Name, Child.CommandLine, Parent.Name AS ParentName, Child.CreateTime FROM pslist() AS Child JOIN pslist() AS Parent ON Child.Ppid = Parent.Pid WHERE Parent.Name IN ('outlook.exe', 'chrome.exe', 'firefox.exe', 'iexplore.exe', 'w3wp.exe') AND Child.Name IN ('cmd.exe', 'powershell.exe')",
-        "carbon_black": "process_name:cmd.exe OR process_name:powershell.exe | where parent_name IN (outlook.exe, chrome.exe, firefox.exe, iexplore.exe, w3wp.exe) | fields process_name, parent_name, cmdline, timestamp"
+        "carbon_black": "(process_name:cmd.exe OR process_name:powershell.exe OR process_name:wscript.exe OR process_name:mshta.exe) AND (parent_name:outlook.exe OR parent_name:chrome.exe OR parent_name:firefox.exe OR parent_name:iexplore.exe OR parent_name:winword.exe OR parent_name:excel.exe OR parent_name:msedge.exe OR parent_name:w3wp.exe)",
+        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>"
       }
     },
     {
@@ -59,7 +62,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
-        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+        "carbon_black": "(process_name:schtasks.exe OR process_name:sc.exe OR process_name:reg.exe OR process_name:powershell.exe) AND (cmdline:*create* OR cmdline:*CurrentVersion*Run* OR cmdline:*New-Service* OR cmdline:*Set-ItemProperty*)",
+        "sysmon": "<RegistryEvent onmatch=\"include\"><TargetObject condition=\"contains any\">\\\\Run\\\\;\\\\RunOnce\\\\;\\\\Policies\\\\Explorer\\\\Run</TargetObject></RegistryEvent>"
       }
     }
   ],
@@ -73,7 +77,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"end with\">powershell.exe</Image><CommandLine condition=\"contains any\">-enc;-nop;IEX;DownloadString</CommandLine></ProcessCreate>"
       }
     },
     {
@@ -85,7 +90,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
-        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+        "carbon_black": "(process_name:net.exe OR process_name:net1.exe OR process_name:powershell.exe) AND (cmdline:*localgroup* OR cmdline:*domain admins* OR cmdline:*enterprise admins* OR cmdline:*remove*)",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     }
   ],
@@ -99,7 +105,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
-        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+        "carbon_black": "(process_name:schtasks.exe OR process_name:sc.exe OR process_name:reg.exe OR process_name:powershell.exe) AND (cmdline:*delete* OR cmdline:*CurrentVersion*Run* OR cmdline:*Remove-ItemProperty* OR cmdline:*DeleteValue*)",
+        "sysmon": "<RegistryEvent onmatch=\"include\"><TargetObject condition=\"contains any\">\\\\Run\\\\;\\\\RunOnce\\\\;\\\\Policies\\\\Explorer\\\\Run</TargetObject></RegistryEvent>"
       }
     },
     {
@@ -111,7 +118,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>"
       }
     }
   ],
@@ -125,9 +133,11 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
-        "carbon_black": "event_type:process OR event_type:user_login | fields device_name, username, process_name, cmdline, timestamp"
+        "carbon_black": null,
+        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>"
       }
     }
   ],
   "metrics": []
 }
+

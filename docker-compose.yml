@@ -7,11 +7,15 @@ services:
       - "8080:8080"
     restart: unless-stopped
     volumes:
-      - playbook-data:/playbooks
+      # Previous Docker named volume (kept for reference):
+      # - playbook-data:/playbooks
+      # Host bind mount for easier manual management of overrides/custom playbooks:
+      - ./playbooks-data:/playbooks
     labels:
       - "com.soc.description=SOC IR Playbook Library"
       - "com.soc.version=4.0"
 
-volumes:
-  playbook-data:
-    driver: local
+# Previous Docker named volume definition (disabled):
+# volumes:
+#   playbook-data:
+#     driver: local

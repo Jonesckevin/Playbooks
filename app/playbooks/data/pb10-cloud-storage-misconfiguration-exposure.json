@@ -23,7 +23,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
-        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -35,7 +36,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
-        "carbon_black": "process_name:* | fields process_name, cmdline, device_name, username, timestamp"
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     }
   ],
@@ -49,7 +51,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -61,7 +64,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>"
       }
     }
   ],
@@ -75,7 +79,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -87,7 +92,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<FileCreate onmatch=\"include\"><TargetFilename condition=\"contains any\">.locked;.encrypted;.crypt;README</TargetFilename></FileCreate>"
       }
     },
     {
@@ -99,7 +105,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -111,7 +118,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -123,7 +131,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -135,7 +144,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -147,7 +157,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     }
   ],
@@ -161,7 +172,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -173,7 +185,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<CreateRemoteThread onmatch=\"include\"><StartModule condition=\"contains any\">kernel32.dll;ntdll.dll</StartModule></CreateRemoteThread>"
       }
     },
     {
@@ -185,7 +198,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     },
     {
@@ -197,7 +211,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     }
   ],
@@ -224,3 +239,4 @@
     }
   ]
 }
+

@@ -7,12 +7,13 @@ const API_DELETE = "cgi-bin/delete_playbook.sh";
 const MITRE_TECHNIQUES_URL = "playbooks/mitre-techniques.json";
 const NAVIGATOR_APP_URL = "attack-navigator/index.html";
 const DEFAULT_TOOL = "velociraptor";
-const TOOL_ORDER = ["splunk", "kql", "qradar", "sigma", "velociraptor", "carbon_black"];
+const TOOL_ORDER = ["splunk", "kql", "qradar", "sigma", "sysmon", "velociraptor", "carbon_black"];
 const TOOL_LABELS = {
   splunk: "Splunk SPL",
   kql: "KQL",
   qradar: "QRadar AQL",
   sigma: "Sigma",
+  sysmon: "Sysmon Rule (XML)",
   velociraptor: "Velociraptor VQL",
   carbon_black: "Carbon Black EDR"
 };
@@ -415,7 +416,13 @@ async function loadCustomPlaybooks() {
 function buildMergedPlaybooks() {
   const merged = new Map(state.libraryById);
   for (const [id, custom] of state.customById.entries()) {
-    merged.set(id, { ...merged.get(id), ...custom, id });
+    const hasLibraryBase = merged.has(id);
+    merged.set(id, {
+      ...merged.get(id),
+      ...custom,
+      id,
+      source: hasLibraryBase ? "library-override" : "custom"
+    });
   }
   state.allPlaybooks = Array.from(merged.values()).sort((a, b) => (a.num || 0) - (b.num || 0));
 }
@@ -490,7 +497,7 @@ function stepToHtml(step, idx, activeTool) {
   const q = step.queries?.[activeTool] || "";
   const qLabelClass = `step-q-label--${activeTool}`;
   const qClass = q ? "" : "step-q--empty";
-  const codeClass = activeTool === "sigma" ? "language-yaml" : activeTool === "kql" || activeTool === "qradar" ? "language-sql" : "language-json";
+  const codeClass = activeTool === "sigma" ? "language-yaml" : activeTool === "sysmon" ? "language-xml" : activeTool === "kql" || activeTool === "qradar" ? "language-sql" : "language-json";
   const sigmaState = activeTool === "sigma" ? validateSigma(q) : null;
   const sigmaBadge = sigmaState ? `<span class="badge ${sigmaState.ok ? "b-green" : "b-red"}" style="margin-left:8px">${sigmaState.ok ? "Valid Sigma" : sigmaState.reason}</span>` : "";
 
@@ -794,6 +801,7 @@ function collectFormPayload() {
   const scenario = document.getElementById("f-scenario").value.trim();
   const cat = document.getElementById("f-cat").value;
   const sev = document.getElementById("f-sev").value;
+  const isLibraryEdit = !!state.editingId && state.libraryById.has(state.editingId);
 
   if (!name || !scenario || !cat) {
     throw new Error("Please complete title, scenario, and category.");
@@ -805,7 +813,7 @@ function collectFormPayload() {
     cat,
     sev,
     type: cat,
-    source: "custom",
+    source: isLibraryEdit ? "library-override" : "custom",
     detection: document.getElementById("f-detection").value.trim(),
     mitre: [...state.mitreTags],
     splunk: document.getElementById("f-splunk").value.trim(),

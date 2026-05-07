@@ -22,8 +22,9 @@
         "kql": null,
         "qradar": null,
         "sigma": null,
-        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
-        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (21,22,53,80,443,8080,8443) AND Name =~ '(?i)(powershell|cmd|curl|wget|rclone|7z|winscp|ftp)' ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": "netconn_count:[10 TO *] AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:curl.exe OR process_name:wget.exe OR process_name:rclone.exe OR process_name:7z.exe)",
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;curl.exe;rclone.exe</Image><DestinationPort condition=\"is any\">53;80;443;8080;8443</DestinationPort></NetworkConnect>"
       }
     },
     {
@@ -34,8 +35,9 @@
         "kql": null,
         "qradar": null,
         "sigma": null,
-        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (22,53,80,135,139,443,445,3389,8080,8443) ORDER BY Ctime DESC LIMIT 200",
-        "carbon_black": "netconn_ipaddr:* AND netconn_port:* | stats count by process_name, netconn_ipaddr, netconn_port, device_name"
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport IN (21,22,53,80,443,8080,8443) AND Name =~ '(?i)(powershell|cmd|curl|wget|rclone|7z|winscp|ftp)' ORDER BY Ctime DESC LIMIT 200",
+        "carbon_black": null,
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;curl.exe;rclone.exe</Image><DestinationPort condition=\"is any\">53;80;443;8080;8443</DestinationPort></NetworkConnect>"
       }
     }
   ],
@@ -49,7 +51,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;curl.exe;rclone.exe</Image><DestinationPort condition=\"is any\">53;80;443;8080;8443</DestinationPort></NetworkConnect>"
       }
     }
   ],
@@ -63,7 +66,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>"
       }
     },
     {
@@ -75,7 +79,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;curl.exe;rclone.exe</Image><DestinationPort condition=\"is any\">53;80;443;8080;8443</DestinationPort></NetworkConnect>"
       }
     },
     {
@@ -87,7 +92,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>"
       }
     },
     {
@@ -99,7 +105,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     }
   ],
@@ -113,7 +120,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>"
       }
     },
     {
@@ -125,7 +133,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;curl.exe;rclone.exe</Image><DestinationPort condition=\"is any\">53;80;443;8080;8443</DestinationPort></NetworkConnect>"
       }
     },
     {
@@ -137,7 +146,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"end with\">powershell.exe</Image><DestinationPort condition=\"is any\">135;139;445;3389</DestinationPort></NetworkConnect>"
       }
     },
     {
@@ -149,7 +159,8 @@
         "qradar": null,
         "sigma": null,
         "velociraptor": null,
-        "carbon_black": null
+        "carbon_black": null,
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
       }
     }
   ],
@@ -176,3 +187,4 @@
     }
   ]
 }
+
