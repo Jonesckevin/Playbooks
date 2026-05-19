@@ -43,12 +43,15 @@ const state = {
   selectedId: null,
   activeCardFilter: "all",
   activeCardSearch: "",
+  activeCardView: "grid",
   editingId: null,
   mitreTags: [],
   mitreLookup: new Map(),
   mitreIndex: [],
   navigatorLayerObjectUrl: null,
+  navigatorCustomLayerObjectUrl: null,
   navigatorLastLayer: null,
+  navigatorScope: "all",
   activeCardSevFilter: "all",
   activeSourceFilter: "all",
   checklistEnabled: false,
@@ -95,6 +98,13 @@ const SEV_MAP = {
 const humanSev      = sev => SEV_MAP[String(sev ?? "").toLowerCase()]?.label || "Unknown";
 const sevBadgeClass = sev => SEV_MAP[String(sev ?? "").toLowerCase()]?.badge || "b-green";
 
+function hasQueryValue(value) {
+  if (value == null) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some((v) => hasQueryValue(v));
+  return String(value).trim().length > 0;
+}
+
 function computeCompleteness(pb) {
   const tools = state.activeTools;
   const result = {};
@@ -105,7 +115,7 @@ function computeCompleteness(pb) {
     ...(pb.investigation?.recovery || [])
   ];
   for (const tool of tools) {
-    result[tool] = allSteps.some(s => s.queries && s.queries[tool] != null);
+    result[tool] = allSteps.some((s) => hasQueryValue(s?.queries?.[tool]));
   }
   return result;
 }
@@ -186,7 +196,7 @@ function collectTechniqueCoverage(playbooks) {
   return coverage;
 }
 
-function buildNavigatorLayer(playbooks, attackDomain) {
+function buildNavigatorLayer(playbooks, attackDomain, scope = "all") {
   const domainKey = attackDomain.split("-")[0];
   const coverage = collectTechniqueCoverage(playbooks);
   const techniques = [];
@@ -214,15 +224,18 @@ function buildNavigatorLayer(playbooks, attackDomain) {
   techniques.sort((a, b) => a.techniqueID.localeCompare(b.techniqueID, undefined, { numeric: true }));
   const maxScore = techniques.reduce((max, t) => Math.max(max, t.score || 0), 1);
 
+  const scopeLabel = scope === "custom" ? "Custom Coverage" : "Coverage";
   return {
-    name: `SOC Coverage - ${ATTACK_DOMAIN_LABELS[attackDomain] || attackDomain}`,
+    name: `SOC ${scopeLabel}`,
     versions: {
       attack: "17",
       navigator: "5.3.2",
       layer: "4.5"
     },
     domain: attackDomain,
-    description: "Techniques referenced by playbook MITRE selections (monitored coverage view).",
+    description: scope === "custom"
+      ? "Techniques referenced by custom playbook MITRE selections (custom coverage view)."
+      : "Techniques referenced by all playbook MITRE selections (full coverage view).",
     sorting: 0,
     hideDisabled: false,
     gradient: {
@@ -238,6 +251,10 @@ function revokeNavigatorLayerUrl() {
   if (state.navigatorLayerObjectUrl) {
     URL.revokeObjectURL(state.navigatorLayerObjectUrl);
     state.navigatorLayerObjectUrl = null;
+  }
+  if (state.navigatorCustomLayerObjectUrl) {
+    URL.revokeObjectURL(state.navigatorCustomLayerObjectUrl);
+    state.navigatorCustomLayerObjectUrl = null;
   }
 }
 
@@ -256,14 +273,21 @@ function applyNavigatorLightTheme(frame) {
     if (!style) {
       style = doc.createElement("style");
       style.id = "playbooks-nav-light-theme";
-      style.textContent = [
-        ".theme-override-light { color-scheme: light !important; }",
-        ".theme-override-light .mat-mdc-tab-nav-bar, .theme-override-light .controlsContainer { box-shadow: none !important; }",
-        ".theme-override-light .controlsContainer .control-sections > li .control-row-item .control-row-button:hover { background-color: #d7e8fa !important; }",
-        ".theme-override-light a { color: #185fa5 !important; }"
-      ].join("\n");
       doc.head.appendChild(style);
     }
+
+    // Re-apply styles on each load to keep contrast consistent after Navigator rerenders.
+    style.textContent = [
+      ".theme-override-light { color-scheme: light !important; }",
+      ".theme-override-light, .theme-override-light body, .theme-override-light .mat-app-background { background: #f3f5f8 !important; color: #1f2937 !important; }",
+      ".theme-override-light .mat-mdc-tab-nav-bar, .theme-override-light .controlsContainer, .theme-override-light .mat-toolbar, .theme-override-light .mat-mdc-menu-panel { box-shadow: none !important; background: #ffffff !important; color: #1f2937 !important; }",
+      ".theme-override-light .mdc-tab__text-label, .theme-override-light .mdc-button__label, .theme-override-light button, .theme-override-light .mat-icon, .theme-override-light .material-icons { color: #1f2937 !important; }",
+      ".theme-override-light .mdc-tab--active .mdc-tab__text-label { color: #185fa5 !important; font-weight: 700 !important; }",
+      ".theme-override-light button:hover, .theme-override-light .mat-mdc-menu-item:hover, .theme-override-light .controlsContainer .control-sections > li .control-row-item .control-row-button:hover { background-color: #e4effb !important; color: #0f4f8a !important; }",
+      ".theme-override-light .control-row-button, .theme-override-light .mat-mdc-menu-item { border-color: #cbd5e1 !important; }",
+      ".theme-override-light a { color: #185fa5 !important; }",
+      ".theme-override-light a:hover { color: #0f4f8a !important; }"
+    ].join("\n");
   } catch (err) {
     console.warn("Navigator light theme override failed:", err);
   }
@@ -276,31 +300,49 @@ function updateNavigatorLayer() {
   const frame = document.getElementById("navigator-iframe");
   if (!playbookSelect || !domainSelect || !summary || !frame) return;
 
+  const scopedPlaybooks = getNavigatorScopedPlaybooks();
   const selectedId = playbookSelect.value;
   const selectedPlaybooks = selectedId === "all"
-    ? [...state.allPlaybooks]
-    : state.allPlaybooks.filter((pb) => pb.id === selectedId);
+    ? [...scopedPlaybooks]
+    : scopedPlaybooks.filter((pb) => pb.id === selectedId);
   const domain = domainSelect.value;
+  const scopeLabel = state.navigatorScope === "custom" ? "custom" : "all";
 
-  const layer = buildNavigatorLayer(selectedPlaybooks, domain);
+  const layer = buildNavigatorLayer(selectedPlaybooks, domain, state.navigatorScope);
   state.navigatorLastLayer = layer;
 
   revokeNavigatorLayerUrl();
   state.navigatorLayerObjectUrl = URL.createObjectURL(new Blob([JSON.stringify(layer, null, 2)], { type: "application/json" }));
+
+  // In All Coverage mode with "All playbooks" selected, also load a second Custom layer
+  // so ATT&CK Navigator shows two internal layer tabs.
+  let customLayerUrl = "";
+  if (state.navigatorScope === "all" && selectedId === "all") {
+    const customPlaybooks = state.allPlaybooks.filter((pb) => pb.source === "custom");
+    const customLayer = buildNavigatorLayer(customPlaybooks, domain, "custom");
+    state.navigatorCustomLayerObjectUrl = URL.createObjectURL(new Blob([JSON.stringify(customLayer, null, 2)], { type: "application/json" }));
+    customLayerUrl = state.navigatorCustomLayerObjectUrl;
+  }
+
   frame.onload = () => {
     applyNavigatorLightTheme(frame);
     setTimeout(() => applyNavigatorLightTheme(frame), 120);
     setTimeout(() => applyNavigatorLightTheme(frame), 500);
   };
-  frame.src = `${NAVIGATOR_APP_URL}#layerURL=${encodeURIComponent(state.navigatorLayerObjectUrl)}`;
+  if (customLayerUrl) {
+    frame.src = `${NAVIGATOR_APP_URL}#layerURL=${encodeURIComponent(state.navigatorLayerObjectUrl)}&layerURL=${encodeURIComponent(customLayerUrl)}`;
+  } else {
+    frame.src = `${NAVIGATOR_APP_URL}#layerURL=${encodeURIComponent(state.navigatorLayerObjectUrl)}`;
+  }
 
-  summary.textContent = `${layer.techniques.length} technique(s) mapped from ${selectedPlaybooks.length} playbook(s) in ${ATTACK_DOMAIN_LABELS[domain] || domain}.`;
+  summary.textContent = `${layer.techniques.length} technique(s) mapped from ${selectedPlaybooks.length} ${scopeLabel} playbook(s) in ${ATTACK_DOMAIN_LABELS[domain] || domain}.`;
 }
 
 function downloadNavigatorLayer() {
   if (!state.navigatorLastLayer) return;
   const domain = state.navigatorLastLayer.domain || "enterprise-attack";
-  const fileName = `mitre-monitored-${domain}.json`;
+  const scope = state.navigatorScope === "custom" ? "custom" : "all";
+  const fileName = `mitre-monitored-${scope}-${domain}.json`;
   const href = URL.createObjectURL(new Blob([JSON.stringify(state.navigatorLastLayer, null, 2)], { type: "application/json" }));
   const a = document.createElement("a");
   a.href = href;
@@ -320,13 +362,19 @@ function renderNavigatorPanel() {
 
   const prevPlaybook = document.getElementById("navigator-playbook-select")?.value || "all";
   const prevDomain = document.getElementById("navigator-domain-select")?.value || "enterprise-attack";
+  const scopedPlaybooks = getNavigatorScopedPlaybooks();
+  const allLabel = state.navigatorScope === "custom" ? "All custom playbooks" : "All playbooks";
 
-  const options = [`<option value="all">All playbooks</option>`]
-    .concat(state.allPlaybooks.map((pb) => `<option value="${esc(pb.id)}">#${pb.num || "-"} ${esc(pb.name)}</option>`))
+  const options = [`<option value="all">${allLabel}</option>`]
+    .concat(scopedPlaybooks.map((pb) => `<option value="${esc(pb.id)}">#${pb.num || "-"} ${esc(pb.name)}</option>`))
     .join("");
 
   root.innerHTML = `
     <div class="navigator-panel">
+      <div class="navigator-source-tabs" role="tablist" aria-label="Navigator source tabs">
+        <button class="navigator-source-tab ${state.navigatorScope === "all" ? "active" : ""}" role="tab" aria-selected="${state.navigatorScope === "all" ? "true" : "false"}" onclick="setNavigatorScope('all')">All Coverage</button>
+        <button class="navigator-source-tab ${state.navigatorScope === "custom" ? "active" : ""}" role="tab" aria-selected="${state.navigatorScope === "custom" ? "true" : "false"}" onclick="setNavigatorScope('custom')">Custom Created</button>
+      </div>
       <div class="navigator-controls">
         <div class="navigator-field">
           <label for="navigator-playbook-select">Coverage source</label>
@@ -350,14 +398,30 @@ function renderNavigatorPanel() {
 
   const playbookSelect = document.getElementById("navigator-playbook-select");
   const domainSelect = document.getElementById("navigator-domain-select");
-  if (playbookSelect && playbookSelect.querySelector(`option[value="${CSS.escape(prevPlaybook)}"]`)) {
-    playbookSelect.value = prevPlaybook;
+  if (playbookSelect) {
+    if (playbookSelect.querySelector(`option[value="${CSS.escape(prevPlaybook)}"]`)) {
+      playbookSelect.value = prevPlaybook;
+    } else {
+      playbookSelect.value = "all";
+    }
   }
   if (domainSelect && domainSelect.querySelector(`option[value="${CSS.escape(prevDomain)}"]`)) {
     domainSelect.value = prevDomain;
   }
 
   updateNavigatorLayer();
+}
+
+function getNavigatorScopedPlaybooks() {
+  if (state.navigatorScope === "custom") {
+    return state.allPlaybooks.filter((pb) => pb.source === "custom");
+  }
+  return [...state.allPlaybooks];
+}
+
+function setNavigatorScope(scope) {
+  state.navigatorScope = scope === "custom" ? "custom" : "all";
+  renderNavigatorPanel();
 }
 
 function normalizeSteps(source) {
@@ -369,7 +433,7 @@ function normalizeSteps(source) {
     const queries = {};
     for (const tool of TOOL_ORDER) {
       const raw = step?.queries?.[tool] ?? step?.[tool] ?? "";
-      if (raw) queries[tool] = String(raw);
+      if (hasQueryValue(raw)) queries[tool] = String(raw);
     }
     return {
       n: step?.n ?? idx + 1,
@@ -502,7 +566,7 @@ function renderCards() {
   if (!host) return;
 
   const search = state.activeCardSearch.trim().toLowerCase();
-  host.innerHTML = state.allPlaybooks.map((pb) => {
+  const visible = state.allPlaybooks.filter((pb) => {
     const haystack = [pb.name, pb.cat, pb.type, pb.mitre.join(" ")].join(" ").toLowerCase();
     const catOk    = state.activeCardFilter === "all" || pb.cat === state.activeCardFilter;
     const sevOk    = state.activeCardSevFilter === "all" || pb.sev === state.activeCardSevFilter;
@@ -510,7 +574,60 @@ function renderCards() {
                      (state.activeSourceFilter === "custom"  && (pb.source === "custom" || pb.source === "library-override")) ||
                      (state.activeSourceFilter === "library" && pb.source === "library");
     const searchOk = !search || haystack.includes(search);
-    const hidden = !catOk || !sevOk || !sourceOk || !searchOk;
+    return catOk && sevOk && sourceOk && searchOk;
+  });
+  const visibleIds = new Set(visible.map((pb) => pb.id));
+
+  if (state.activeCardView === "table") {
+    host.classList.add("cards-list-mode");
+    host.innerHTML = `
+      <div class="cards-table-wrap">
+        <table class="cards-table" aria-label="Playbooks list table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Playbook</th>
+              <th>Category</th>
+              <th>Severity</th>
+              <th>Source</th>
+              <th>MITRE</th>
+              <th>Tool coverage</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${visible.map((pb) => {
+              const mitreBadges = pb.mitre.slice(0, 4).map((m) => `<span class="mitre">${esc(m)}</span>`).join("");
+              const comp = computeCompleteness(pb);
+              const pipsHtml = `<div class="card-completeness card-completeness-table">${state.activeTools.map((t) =>
+                `<span class="tool-pip tool-pip-${t} ${comp[t] ? 'pip-on' : 'pip-off'}" title="${TOOL_LABELS[t] || t}"></span>`
+              ).join('')}</div>`;
+              const sourceLabel = pb.source === "custom" ? "Custom" : pb.source === "library-override" ? "Override" : "Library";
+              return `
+                <tr class="cards-table-row" tabindex="0" onclick="openPlaybook('${esc(pb.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPlaybook('${esc(pb.id)}');}">
+                  <td class="cards-table-num">#${pb.num || "-"}</td>
+                  <td>
+                    <div class="cards-table-name">${esc(pb.name)}</div>
+                  </td>
+                  <td><span class="badge b-gray">${esc(pb.cat)}</span></td>
+                  <td><span class="badge ${sevBadgeClass(pb.sev)}">${humanSev(pb.sev)}</span></td>
+                  <td><span class="badge ${pb.source === "custom" ? "b-purple" : pb.source === "library-override" ? "b-amber" : "b-blue"}">${sourceLabel}</span></td>
+                  <td>${mitreBadges || '<span class="cards-table-empty">-</span>'}</td>
+                  <td>${pipsHtml}</td>
+                  <td>${pb.updated ? `<span class="cards-table-updated">${esc(pb.updated)}</span>` : '<span class="cards-table-empty">-</span>'}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+    return;
+  }
+
+  host.classList.remove("cards-list-mode");
+  host.innerHTML = state.allPlaybooks.map((pb) => {
+    const hidden = !visibleIds.has(pb.id);
     const mitreBadges = pb.mitre.slice(0, 3).map((m) => `<span class="mitre">${esc(m)}</span>`).join("");
     const comp = computeCompleteness(pb);
     const pipsHtml = `<div class="card-completeness">${state.activeTools.map(t =>
@@ -534,8 +651,22 @@ function renderCards() {
   }).join("");
 }
 
+function setCardView(view, btn) {
+  state.activeCardView = view === "table" ? "table" : "grid";
+  localStorage.setItem("pb-card-view", state.activeCardView);
+  document.querySelectorAll(".view-toggle-btn").forEach((b) => b.classList.remove("on"));
+  if (btn) {
+    btn.classList.add("on");
+  } else {
+    const target = document.querySelector(`.view-toggle-btn[data-view='${state.activeCardView}']`);
+    if (target) target.classList.add("on");
+  }
+  renderCards();
+}
+
 function stepToHtml(step, idx, activeTool, pbId, checklistEnabled, checklist, globalIdx) {
-  const q = step.queries?.[activeTool] || "";
+  const qRaw = step.queries?.[activeTool];
+  const q = hasQueryValue(qRaw) ? String(qRaw) : "";
   const qLabelClass = `step-q-label--${activeTool}`;
   const qClass = q ? "" : "step-q--empty";
   const codeClass = ALL_TOOLS[activeTool]?.lang || "language-plaintext";
@@ -1130,6 +1261,15 @@ async function init() {
     await loadLibraryDetails();
     await refreshData();
 
+    const savedCardView = localStorage.getItem("pb-card-view");
+    if (savedCardView === "table") {
+      state.activeCardView = "table";
+      document.querySelectorAll(".view-toggle-btn").forEach((b) => b.classList.remove("on"));
+      const tableBtn = document.querySelector(".view-toggle-btn[data-view='table']");
+      if (tableBtn) tableBtn.classList.add("on");
+      renderCards();
+    }
+
     const cardSearch = document.getElementById("card-search");
     if (cardSearch) {
       cardSearch.addEventListener("input", (e) => {
@@ -1181,12 +1321,14 @@ window.toggleMobileNav = toggleMobileNav;
 window.closeMobileNav = closeMobileNav;
 window.updateMitreInputHint = updateMitreInputHint;
 window.updateNavigatorLayer = updateNavigatorLayer;
+window.setNavigatorScope = setNavigatorScope;
 window.downloadNavigatorLayer = downloadNavigatorLayer;
 window.openNavigatorInNewTab = openNavigatorInNewTab;
 window.filterSeverity = filterSeverity;
 window.filterSource = filterSource;
 window.filterSourceSelect = filterSourceSelect;
 window.filterSeveritySelect = filterSeveritySelect;
+window.setCardView = setCardView;
 window.toggleChecklist = toggleChecklist;
 window.toggleChecklistStep = toggleChecklistStep;
 window.resetChecklist = resetChecklist;

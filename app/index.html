@@ -109,6 +109,14 @@
             <option value="custom">✏️ Custom / Edited</option>
           </select>
         </div>
+        <div class="inline-view-toggle" role="group" aria-label="Playbook view mode">
+          <button class="view-toggle-btn on" data-view="grid" onclick="setCardView('grid', this)" title="Card view" aria-label="Card view">
+            <span class="view-icon view-icon-card" aria-hidden="true"></span>
+          </button>
+          <button class="view-toggle-btn" data-view="table" onclick="setCardView('table', this)" title="Table view" aria-label="Table view">
+            <span class="view-icon view-icon-grid4" aria-hidden="true"></span>
+          </button>
+        </div>
       </div>
   <div class="cards" id="cards-grid"></div>
 </div>
@@ -116,8 +124,8 @@
 <!-- BASE -->
 <div class="panel" id="panel-base">
   <div class="pb-ey">Base procedure — all alerts</div>
-  <div class="pb-ti">Alert intake, triage &amp; documentation</div>
-  <div class="pb-me"><span class="badge b-gray">Universal</span><span class="badge b-blue">Splunk</span></div>
+  <div class="pb-ti">Alert intake, triage, escalation &amp; documentation</div>
+  <div class="pb-me"><span class="badge b-gray">Universal</span><span class="badge b-blue">SIEM + EDR</span><span class="badge b-teal">Last updated 2026-05-18</span></div>
   <div class="phases">
     <div class="ph-box ph-1"><span>1</span>Intake</div>
     <div class="ph-box ph-2"><span>2</span>Triage</div>
@@ -125,30 +133,30 @@
     <div class="ph-box ph-5"><span>4</span>Document</div>
   </div>
   <div class="sec"><div class="sec-label">Phase 1 — Alert intake</div><div class="steps">
-    <div class="step"><div class="step-n">1</div><div><div class="step-t">Open and read the alert in full</div><div class="step-d">Record: alert name, rule/correlation ID, time fired, severity, triggering src/dest IP, port, protocol, and user context. Do not dismiss before triage is complete.</div></div></div>
-    <div class="step"><div class="step-n">2</div><div><div class="step-t">Pull underlying raw events in Splunk</div><div class="step-d">Navigate to the notable event. Always read raw log lines — never rely on the summary field alone.<br><code style="font-size:11px;font-family:var(--mono);background:var(--bg2);padding:4px 7px;border-radius:4px;display:block;margin-top:6px;color:var(--blue-t);word-break:break-all">index=network earliest=-30m | search [correlation_filter] | table _time, src_ip, dest_ip, dest_port, action, bytes, protocol</code></div></div></div>
-    <div class="step"><div class="step-n">3</div><div><div class="step-t">Classify the asset and traffic direction</div><div class="step-d">Internal / external / known-bad. Asset role: user device, server, gateway, network device. Direction: inbound / outbound / lateral.</div></div></div>
+    <div class="step"><div class="step-n">1</div><div><div class="step-t">Open and validate the alert context</div><div class="step-d">Capture: alert name, rule/correlation ID, severity, detection source, first/last seen, triggering entities (host, user, IP, process), and affected environment (prod/dev/test).</div></div></div>
+    <div class="step"><div class="step-n">2</div><div><div class="step-t">Pull raw telemetry for the full event window</div><div class="step-d">Review raw events before making a verdict. Use at least a 30-minute lookback around the trigger.<br><code style="font-size:11px;font-family:var(--mono);background:var(--bg2);padding:4px 7px;border-radius:4px;display:block;margin-top:6px;color:var(--blue-t);word-break:break-all">index=* earliest=-30m latest=now | search [correlation_filter] | table _time, host, user, src_ip, dest_ip, process, action</code></div></div></div>
+    <div class="step"><div class="step-n">3</div><div><div class="step-t">Classify criticality and exposure</div><div class="step-d">Determine asset criticality, data sensitivity, external exposure, and blast radius. Mark as isolated, host-scoped, user-scoped, or environment-wide.</div></div></div>
   </div></div>
   <div class="sec"><div class="sec-label">Phase 2 — Triage checklist</div>
   <div class="tbl-wrap"><table class="g"><thead><tr><th>Check</th><th>Action</th><th>Source</th></tr></thead><tbody>
-    <tr><td>False positive?</td><td>Compare against baselines; check tuning notes on this rule</td><td><span class="badge b-blue">Splunk</span></td></tr>
+    <tr><td>False positive candidate?</td><td>Compare to baseline behavior, suppression history, and known tuning notes</td><td><span class="badge b-blue">SIEM</span></td></tr>
     <tr><td>Threat intel</td><td>Look up all IPs, domains, hashes against IOC feeds</td><td><span class="badge b-gray">TI / OSINT</span></td></tr>
-    <tr><td>Scope</td><td>Single host or multiple? Search the indicator across all sources</td><td><span class="badge b-blue">Splunk</span></td></tr>
-    <tr><td>Volume / frequency</td><td>One-off event or sustained pattern? Pull counts over 24h and 7d</td><td><span class="badge b-blue">Splunk</span></td></tr>
-    <tr><td>Historical context</td><td>Has this src/dest been seen before? Were prior alerts actioned?</td><td><span class="badge b-blue">Splunk</span></td></tr>
-    <tr><td>Business context</td><td>Expected given time of day, user role, or system function?</td><td><span class="badge b-gray">CMDB / comms</span></td></tr>
+    <tr><td>Scope</td><td>Determine if activity is single-entity, multi-host, or lateral movement. Pivot on host, user, process, and network indicators.</td><td><span class="badge b-blue">SIEM + EDR</span></td></tr>
+    <tr><td>Volume and timing</td><td>Check if this is bursty, periodic, or sustained activity. Compare 24h and 7d trends.</td><td><span class="badge b-blue">SIEM</span></td></tr>
+    <tr><td>Historical context</td><td>Review prior related incidents, previous verdicts, and recurrence patterns.</td><td><span class="badge b-blue">Case Mgmt</span></td></tr>
+    <tr><td>Business impact</td><td>Assess potential impact to operations, data confidentiality, integrity, and availability.</td><td><span class="badge b-gray">CMDB / owner</span></td></tr>
   </tbody></table></div></div>
   <div class="sec"><div class="sec-label">Phase 3 — Decision &amp; escalation</div>
   <div class="tbl-wrap"><table class="g"><thead><tr><th>Verdict</th><th>Action</th><th>Priority</th></tr></thead><tbody>
-    <tr><td><span class="badge b-gray">False positive</span></td><td>Close with notes; flag rule for tuning</td><td style="color:var(--text2)">Informational</td></tr>
-    <tr><td><span class="badge b-teal">Benign positive</span></td><td>Close with justification; consider suppression</td><td style="color:var(--text2)">Low</td></tr>
-    <tr><td><span class="badge b-amber">Suspicious</span></td><td>Escalate to T2 with findings summary; open ticket; continue monitoring</td><td style="color:var(--amber-t);font-weight:600">Medium</td></tr>
-    <tr><td><span class="badge b-red">Confirmed true positive</span></td><td>Immediate escalation; consider containment; notify TL; preserve evidence</td><td style="color:var(--red-t);font-weight:600">High / P1</td></tr>
+    <tr><td><span class="badge b-gray">False positive</span></td><td>Close with evidence, root-cause the trigger, and raise tuning request.</td><td style="color:var(--text2)">Informational</td></tr>
+    <tr><td><span class="badge b-teal">Benign true positive</span></td><td>Document expected behavior and implement suppression with expiry/review date.</td><td style="color:var(--text2)">Low</td></tr>
+    <tr><td><span class="badge b-amber">Suspicious / inconclusive</span></td><td>Escalate to Tier 2 with timeline, key observables, and hypothesis.</td><td style="color:var(--amber-t);font-weight:600">Medium</td></tr>
+    <tr><td><span class="badge b-red">Confirmed malicious</span></td><td>Trigger incident response workflow, contain immediately, notify stakeholders, preserve forensic evidence.</td><td style="color:var(--red-t);font-weight:600">High / P1</td></tr>
   </tbody></table></div></div>
   <div class="sec"><div class="sec-label">Phase 4 — Documentation</div><div class="steps">
-    <div class="step"><div class="step-n">A</div><div><div class="step-t">Log all investigative actions with timestamps</div><div class="step-d">Every Splunk query, every source consulted, every person contacted, every decision made. The ticket must stand alone as the complete record.</div></div></div>
-    <div class="step"><div class="step-n">B</div><div><div class="step-t">Capture and attach evidence</div><div class="step-d">Export relevant Splunk log snippets. Record all IPs, domains, accounts, ports, timestamps, and data volumes involved.</div></div></div>
-    <div class="step"><div class="step-n">C</div><div><div class="step-t">Record verdict and close formally</div><div class="step-d">Mark verdict type. If escalating, include a concise findings summary for the next tier. Tag the rule for FP/TP tracking.</div></div></div>
+    <div class="step"><div class="step-n">A</div><div><div class="step-t">Maintain an investigation timeline</div><div class="step-d">Log each action with timestamp, analyst, source consulted, and rationale. Keep notes audit-ready.</div></div></div>
+    <div class="step"><div class="step-n">B</div><div><div class="step-t">Attach supporting evidence</div><div class="step-d">Include key queries, event excerpts, indicator list, impacted entities, and containment actions performed.</div></div></div>
+    <div class="step"><div class="step-n">C</div><div><div class="step-t">Close or hand off with a clear summary</div><div class="step-d">State verdict, confidence, impact, and follow-up tasks. If escalated, provide a concise handoff package for the next team.</div></div></div>
   </div></div>
 </div>
 
