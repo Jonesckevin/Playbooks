@@ -11,6 +11,17 @@ services:
       # - playbook-data:/playbooks
       # Host bind mount for easier manual management of overrides/custom playbooks:
       - ./playbooks-data:/playbooks
+    environment:
+      # ── Active SIEM/tool tabs (exactly 6 shown) ───────────────────────────
+      # Available values: splunk, kql, security_onion, qradar, sigma, sysmon,
+      #   velociraptor, osquery, carbon_black, elastic, chronicle, crowdstrike,
+      #   defender, opensearch, logrhythm
+      - SIEM_TOOL_1=security_onion
+      - SIEM_TOOL_2=sysmon
+      - SIEM_TOOL_3=osquery
+      - SIEM_TOOL_4=velociraptor
+      - SIEM_TOOL_5=elastic
+      - SIEM_TOOL_6=carbon_black
     labels:
       - "com.soc.description=SOC IR Playbook Library"
       - "com.soc.version=4.0"

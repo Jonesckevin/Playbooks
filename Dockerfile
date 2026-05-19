@@ -33,7 +33,8 @@ RUN echo '<Directory "/var/www/localhost/cgi-bin">'              >> /etc/apache2
     echo '    AddHandler cgi-script .sh'                          >> /etc/apache2/conf.d/cgi.conf && \
     echo '    Require all granted'                                >> /etc/apache2/conf.d/cgi.conf && \
     echo '</Directory>'                                           >> /etc/apache2/conf.d/cgi.conf && \
-    echo 'ScriptAlias /cgi-bin/ /var/www/localhost/cgi-bin/'     >> /etc/apache2/conf.d/cgi.conf
+    echo 'ScriptAlias /cgi-bin/ /var/www/localhost/cgi-bin/'     >> /etc/apache2/conf.d/cgi.conf && \
+    echo 'PassEnv SIEM_TOOL_1 SIEM_TOOL_2 SIEM_TOOL_3 SIEM_TOOL_4 SIEM_TOOL_5 SIEM_TOOL_6' >> /etc/apache2/conf.d/cgi.conf
 
 # ── Logs → stdout/stderr so docker logs works ─────────────────────────────
 RUN rm -rf /var/www/localhost/htdocs/* && \
@@ -51,6 +52,7 @@ COPY app/cgi-bin/save_playbook.sh   /var/www/localhost/cgi-bin/save_playbook.sh
 COPY app/cgi-bin/load_playbooks.sh  /var/www/localhost/cgi-bin/load_playbooks.sh
 COPY app/cgi-bin/update_playbook.sh /var/www/localhost/cgi-bin/update_playbook.sh
 COPY app/cgi-bin/delete_playbook.sh /var/www/localhost/cgi-bin/delete_playbook.sh
+COPY app/cgi-bin/get_config.sh      /var/www/localhost/cgi-bin/get_config.sh
 
 RUN chmod +x /var/www/localhost/cgi-bin/*.sh
 

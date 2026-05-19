@@ -6,17 +6,29 @@ const API_UPDATE = "cgi-bin/update_playbook.sh";
 const API_DELETE = "cgi-bin/delete_playbook.sh";
 const MITRE_TECHNIQUES_URL = "playbooks/mitre-techniques.json";
 const NAVIGATOR_APP_URL = "attack-navigator/index.html";
-const DEFAULT_TOOL = "velociraptor";
-const TOOL_ORDER = ["splunk", "kql", "qradar", "sigma", "sysmon", "velociraptor", "carbon_black"];
-const TOOL_LABELS = {
-  splunk: "Splunk SPL",
-  kql: "KQL",
-  qradar: "QRadar AQL",
-  sigma: "Sigma",
-  sysmon: "Sysmon Rule (XML)",
-  velociraptor: "Velociraptor VQL",
-  carbon_black: "Carbon Black EDR"
+const DEFAULT_TOOL_FALLBACK = "security_onion";
+let DEFAULT_TOOL = DEFAULT_TOOL_FALLBACK;
+
+// Full registry of all supported tools/SIEMs
+const ALL_TOOLS = {
+  splunk:       { label: "Splunk SPL",           lang: "language-bash" },
+  kql:          { label: "Microsoft KQL",         lang: "language-sql"  },
+  security_onion: { label: "Security Onion",      lang: "language-sql"  },
+  qradar:       { label: "IBM QRadar AQL",        lang: "language-sql"  },
+  sigma:        { label: "Sigma Rule",            lang: "language-yaml" },
+  sysmon:       { label: "Sysmon XML",            lang: "language-xml"  },
+  velociraptor: { label: "Velociraptor VQL",      lang: "language-sql"  },
+  osquery:      { label: "OSQuery SQL",           lang: "language-sql"  },
+  carbon_black: { label: "Carbon Black",          lang: "language-sql"  },
+  elastic:      { label: "Elastic EQL",           lang: "language-json" },
+  chronicle:    { label: "Google Chronicle",      lang: "language-yaml" },
+  crowdstrike:  { label: "CrowdStrike FQL",       lang: "language-bash" },
+  defender:     { label: "Defender XDR KQL",      lang: "language-sql"  },
+  opensearch:   { label: "OpenSearch DSL",        lang: "language-json" },
+  logrhythm:    { label: "LogRhythm Axiom",       lang: "language-sql"  },
 };
+const TOOL_ORDER  = Object.keys(ALL_TOOLS);
+const TOOL_LABELS = Object.fromEntries(Object.entries(ALL_TOOLS).map(([k, v]) => [k, v.label]));
 const ATTACK_DOMAIN_LABELS = {
   "enterprise-attack": "Enterprise ATT&CK",
   "mobile-attack": "Mobile ATT&CK",
@@ -36,7 +48,11 @@ const state = {
   mitreLookup: new Map(),
   mitreIndex: [],
   navigatorLayerObjectUrl: null,
-  navigatorLastLayer: null
+  navigatorLastLayer: null,
+  activeCardSevFilter: "all",
+  activeSourceFilter: "all",
+  checklistEnabled: false,
+  activeTools: ["security_onion", "sysmon", "osquery", "velociraptor", "elastic", "carbon_black"],
 };
 
 function toggleMobileNav() {
@@ -66,21 +82,32 @@ function toSlug(input) {
   return String(input ?? "").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
 }
 
-function humanSev(sev) {
-  const value = String(sev ?? "").toLowerCase();
-  if (value === "critical") return "Critical";
-  if (value === "high") return "High";
-  if (value === "medium") return "Medium";
-  if (value === "low") return "Low";
-  return "Unknown";
+function getPlaybookById(id) {
+  return state.libraryById.get(id) || state.customById.get(id);
 }
 
-function sevBadgeClass(sev) {
-  const value = String(sev ?? "").toLowerCase();
-  if (value === "critical") return "b-red";
-  if (value === "high") return "b-amber";
-  if (value === "medium") return "b-blue";
-  return "b-green";
+const SEV_MAP = {
+  critical: { label: "Critical", badge: "b-red" },
+  high:     { label: "High",     badge: "b-amber" },
+  medium:   { label: "Medium",   badge: "b-blue" },
+  low:      { label: "Low",      badge: "b-green" },
+};
+const humanSev      = sev => SEV_MAP[String(sev ?? "").toLowerCase()]?.label || "Unknown";
+const sevBadgeClass = sev => SEV_MAP[String(sev ?? "").toLowerCase()]?.badge || "b-green";
+
+function computeCompleteness(pb) {
+  const tools = state.activeTools;
+  const result = {};
+  const allSteps = [
+    ...(pb.investigation?.detectionAnalysis || []),
+    ...(pb.investigation?.containment || []),
+    ...(pb.investigation?.eradication || []),
+    ...(pb.investigation?.recovery || [])
+  ];
+  for (const tool of tools) {
+    result[tool] = allSteps.some(s => s.queries && s.queries[tool] != null);
+  }
+  return result;
 }
 
 function splitMitre(value) {
@@ -371,14 +398,17 @@ function normalizePlaybook(pb) {
     scenario: pb.scenario || "",
     detection: pb.detection || "",
     mitre,
-    splunk: pb.splunk || "",
+    splunk: pb.splunk || "",          // legacy field (kept for backward compat)
+    primaryQuery: pb.primaryQuery || pb.splunk || "",
     createdAt: pb.createdAt || "",
     investigation: {
       detectionAnalysis: normalizeSteps(detectionSource),
       containment: normalizeSteps(containmentSource),
       eradication: normalizeSteps(eradicationSource),
       recovery: normalizeSteps(recoverySource)
-    }
+    },
+    updated: pb.updated || "",
+    related: Array.isArray(pb.related) ? pb.related : []
   };
 }
 
@@ -474,10 +504,19 @@ function renderCards() {
   const search = state.activeCardSearch.trim().toLowerCase();
   host.innerHTML = state.allPlaybooks.map((pb) => {
     const haystack = [pb.name, pb.cat, pb.type, pb.mitre.join(" ")].join(" ").toLowerCase();
-    const catOk = state.activeCardFilter === "all" || pb.cat === state.activeCardFilter;
+    const catOk    = state.activeCardFilter === "all" || pb.cat === state.activeCardFilter;
+    const sevOk    = state.activeCardSevFilter === "all" || pb.sev === state.activeCardSevFilter;
+    const sourceOk = state.activeSourceFilter === "all" ||
+                     (state.activeSourceFilter === "custom"  && (pb.source === "custom" || pb.source === "library-override")) ||
+                     (state.activeSourceFilter === "library" && pb.source === "library");
     const searchOk = !search || haystack.includes(search);
-    const hidden = !catOk || !searchOk;
+    const hidden = !catOk || !sevOk || !sourceOk || !searchOk;
     const mitreBadges = pb.mitre.slice(0, 3).map((m) => `<span class="mitre">${esc(m)}</span>`).join("");
+    const comp = computeCompleteness(pb);
+    const pipsHtml = `<div class="card-completeness">${state.activeTools.map(t =>
+      `<span class="tool-pip tool-pip-${t} ${comp[t] ? 'pip-on' : 'pip-off'}" title="${TOOL_LABELS[t] || t}"></span>`
+    ).join('')}</div>`;
+    const updatedHtml = pb.updated ? `<div class="card-updated">Updated ${pb.updated}</div>` : '';
     return `
       <div class="card ${hidden ? "hidden" : ""}" data-cat="${esc(pb.cat)}" onclick="openPlaybook('${esc(pb.id)}')">
         <div class="card-num">#${pb.num || "-"}</div>
@@ -488,20 +527,26 @@ function renderCards() {
           ${pb.source === "custom" ? '<span class="badge b-purple">Custom</span>' : ""}
           ${mitreBadges}
         </div>
+        ${pipsHtml}
+        ${updatedHtml}
       </div>
     `;
   }).join("");
 }
 
-function stepToHtml(step, idx, activeTool) {
+function stepToHtml(step, idx, activeTool, pbId, checklistEnabled, checklist, globalIdx) {
   const q = step.queries?.[activeTool] || "";
   const qLabelClass = `step-q-label--${activeTool}`;
   const qClass = q ? "" : "step-q--empty";
-  const codeClass = activeTool === "sigma" ? "language-yaml" : activeTool === "sysmon" ? "language-xml" : activeTool === "kql" || activeTool === "qradar" ? "language-sql" : "language-json";
+  const codeClass = ALL_TOOLS[activeTool]?.lang || "language-plaintext";
   const sigmaState = activeTool === "sigma" ? validateSigma(q) : null;
   const sigmaBadge = sigmaState ? `<span class="badge ${sigmaState.ok ? "b-green" : "b-red"}" style="margin-left:8px">${sigmaState.ok ? "Valid Sigma" : sigmaState.reason}</span>` : "";
 
-  return `
+  const checked = checklistEnabled && checklist && checklist[globalIdx];
+  const wrapOpen = checklistEnabled ? `<div class="step-checklist${checked ? ' step-checked' : ''}"><input type="checkbox" class="step-check" ${checked ? 'checked' : ''} onchange="toggleChecklistStep('${pbId}',${globalIdx},this.checked)"><div class="step-body">` : '';
+  const wrapClose = checklistEnabled ? '</div></div>' : '';
+
+  const stepContent = `
     <div class="step">
       <div class="step-n">${idx + 1}</div>
       <div>
@@ -514,9 +559,10 @@ function stepToHtml(step, idx, activeTool) {
       </div>
     </div>
   `;
+  return wrapOpen + stepContent + wrapClose;
 }
 
-function sectionToHtml(title, steps, activeTool) {
+function sectionToHtml(title, steps, activeTool, pbId, checklistEnabled, checklist, offset) {
   if (!steps.length) {
     return `
       <div class="sec">
@@ -528,7 +574,7 @@ function sectionToHtml(title, steps, activeTool) {
   return `
     <div class="sec">
       <div class="sec-label">${esc(title)}</div>
-      <div class="steps">${steps.map((s, i) => stepToHtml(s, i, activeTool)).join("")}</div>
+      <div class="steps">${steps.map((s, i) => stepToHtml(s, i, activeTool, pbId, checklistEnabled, checklist, (offset || 0) + i)).join("")}</div>
     </div>
   `;
 }
@@ -537,8 +583,48 @@ function renderDetail(playbook, activeTool = DEFAULT_TOOL) {
   const host = document.getElementById("detail-content");
   if (!host) return;
 
-  const tabs = TOOL_ORDER.map((tool) => `<button class="tool-tab ${tool === activeTool ? "active" : ""}" onclick="switchToolTab('${esc(playbook.id)}','${tool}')">${esc(TOOL_LABELS[tool])}</button>`).join("");
+  const tabs = state.activeTools.map((tool) => `<button class="tool-tab ${tool === activeTool ? "active" : ""}" onclick="switchToolTab('${esc(playbook.id)}','${tool}')">${esc(TOOL_LABELS[tool])}</button>`).join("");
   const mitre = playbook.mitre.map((m) => renderMitreLink(m, false)).join("");
+
+  const checklist = loadChecklist(playbook.id);
+  const detSteps = playbook.investigation?.detectionAnalysis || [];
+  const contSteps = playbook.investigation?.containment || [];
+  const eradSteps = playbook.investigation?.eradication || [];
+  const recSteps = playbook.investigation?.recovery || [];
+  const allSteps = [...detSteps, ...contSteps, ...eradSteps, ...recSteps];
+  const totalSteps = allSteps.length;
+  const doneSteps = Object.values(checklist).filter(Boolean).length;
+  const progressPct = totalSteps > 0 ? Math.round((doneSteps / totalSteps) * 100) : 0;
+
+  const checklistBarHtml = `
+    <div class="checklist-bar">
+      <button class="checklist-toggle-btn${state.checklistEnabled ? ' active' : ''}" onclick="toggleChecklist('${esc(playbook.id)}')">
+        ${state.checklistEnabled ? '✓ Checklist On' : '▷ Start Incident'}
+      </button>
+      ${state.checklistEnabled ? `
+        <div class="checklist-progress-wrap">
+          <div class="checklist-progress" style="width:${progressPct}%"></div>
+        </div>
+        <span class="checklist-done">${doneSteps}/${totalSteps} steps</span>
+        <button class="checklist-reset-btn" onclick="resetChecklist('${esc(playbook.id)}')">Reset</button>
+      ` : ''}
+    </div>`;
+
+  const relatedHtml = (playbook.related && playbook.related.length > 0) ? `
+    <div class="related-section">
+      <div class="related-label">Related Playbooks</div>
+      <div class="related-list">
+        ${playbook.related.map(relId => {
+          const rel = getPlaybookById(relId);
+          return rel ? `<button class="related-chip" onclick="openPlaybook('${relId}')">${esc(rel.name)}</button>` : '';
+        }).filter(Boolean).join('')}
+      </div>
+    </div>` : '';
+
+  const detOffset = 0;
+  const contOffset = detSteps.length;
+  const eradOffset = contOffset + contSteps.length;
+  const recOffset = eradOffset + eradSteps.length;
 
   host.innerHTML = `
     <div class="pb-ey">${esc(playbook.type || playbook.cat)}</div>
@@ -552,13 +638,17 @@ function renderDetail(playbook, activeTool = DEFAULT_TOOL) {
     <div class="detail-actions">
       <button class="btn btn-secondary" onclick="startEdit('${esc(playbook.id)}')">Edit</button>
       <button class="btn btn-danger" onclick="deletePlaybook('${esc(playbook.id)}')">Delete / Revert</button>
+      <button class="btn btn-print" onclick="printPlaybook()">🖨 Print</button>
+      <button class="btn btn-soar" onclick="exportSoar('${esc(playbook.id)}')">⬇ Export SOAR</button>
     </div>
+    ${checklistBarHtml}
     ${playbook.scenario ? `<div class="scenario-box">${esc(playbook.scenario)}</div>` : ""}
     <div class="tool-tabs-bar">${tabs}</div>
-    ${sectionToHtml("Detection & analysis", playbook.investigation.detectionAnalysis, activeTool)}
-    ${sectionToHtml("Containment", playbook.investigation.containment, activeTool)}
-    ${sectionToHtml("Eradication", playbook.investigation.eradication, activeTool)}
-    ${sectionToHtml("Recovery & lessons learned", playbook.investigation.recovery, activeTool)}
+    ${sectionToHtml("Detection & analysis", detSteps, activeTool, playbook.id, state.checklistEnabled, checklist, detOffset)}
+    ${sectionToHtml("Containment", contSteps, activeTool, playbook.id, state.checklistEnabled, checklist, contOffset)}
+    ${sectionToHtml("Eradication", eradSteps, activeTool, playbook.id, state.checklistEnabled, checklist, eradOffset)}
+    ${sectionToHtml("Recovery & lessons learned", recSteps, activeTool, playbook.id, state.checklistEnabled, checklist, recOffset)}
+    ${relatedHtml}
   `;
 
   if (window.hljs) {
@@ -568,6 +658,7 @@ function renderDetail(playbook, activeTool = DEFAULT_TOOL) {
 
 function setActiveNav(target) {
   document.querySelectorAll(".nav-item").forEach((n) => n.classList.remove("active"));
+  document.querySelectorAll(".sb-create-btn").forEach((n) => n.classList.remove("active"));
   if (target) target.classList.add("active");
 }
 
@@ -584,6 +675,7 @@ function showPanel(name, navEl) {
 function openPlaybook(id, navEl) {
   const pb = state.allPlaybooks.find((p) => p.id === id);
   if (!pb) return;
+  state.checklistEnabled = false;
   state.selectedId = id;
   renderDetail(pb, DEFAULT_TOOL);
   showPanel("detail", navEl || document.getElementById(`nav-${id}`));
@@ -623,6 +715,60 @@ function filterCards(cat, btn) {
   renderCards();
 }
 
+function filterSource(src, btn) {
+  state.activeSourceFilter = src;
+  document.querySelectorAll(".source-filter-btn").forEach(b => b.classList.remove("on"));
+  if (btn) btn.classList.add("on");
+  renderCards();
+}
+
+function filterSourceSelect(val) {
+  state.activeSourceFilter = val;
+  renderCards();
+}
+
+function filterSeveritySelect(val) {
+  state.activeCardSevFilter = val;
+  renderCards();
+}
+
+function filterSeverity(sev, btn) {  state.activeCardSevFilter = sev;
+  document.querySelectorAll(".sev-filter-btn").forEach(b => b.classList.remove("on"));
+  if (btn) {
+    btn.classList.add("on");
+  } else {
+    const target = document.querySelector(`.sev-filter-btn.sev-${sev}`);
+    if (target) target.classList.add("on");
+  }
+  renderCards();
+}
+
+function loadChecklist(pbId) {
+  try {
+    return JSON.parse(localStorage.getItem(`checklist-${pbId}`) || '{}');
+  } catch { return {}; }
+}
+function saveChecklist(pbId, data) {
+  localStorage.setItem(`checklist-${pbId}`, JSON.stringify(data));
+}
+function toggleChecklist(pbId) {
+  const pb = getPlaybookById(pbId);
+  if (!pb) return;
+  state.checklistEnabled = !state.checklistEnabled;
+  renderDetail(pb);
+}
+function toggleChecklistStep(pbId, stepIdx, checked) {
+  const data = loadChecklist(pbId);
+  data[stepIdx] = checked;
+  saveChecklist(pbId, data);
+  const pb = getPlaybookById(pbId);
+  if (pb) renderDetail(pb);
+}
+function resetChecklist(pbId) {
+  localStorage.removeItem(`checklist-${pbId}`);
+  const pb = getPlaybookById(pbId);
+  if (pb) renderDetail(pb);
+}
 function readStepRows(containerId) {
   const rows = document.querySelectorAll(`#${containerId} .step-row`);
   return Array.from(rows).map((row, idx) => {
@@ -773,7 +919,7 @@ function fillFormFromPlaybook(pb) {
   document.getElementById("f-cat").value = pb.cat || "";
   document.getElementById("f-sev").value = pb.sev || "medium";
   document.getElementById("f-detection").value = pb.detection || "";
-  document.getElementById("f-splunk").value = pb.splunk || "";
+  document.getElementById("f-primary-query").value = pb.primaryQuery || pb.splunk || "";
 
   state.mitreTags = [...pb.mitre];
   renderMitreTags();
@@ -816,7 +962,7 @@ function collectFormPayload() {
     source: isLibraryEdit ? "library-override" : "custom",
     detection: document.getElementById("f-detection").value.trim(),
     mitre: [...state.mitreTags],
-    splunk: document.getElementById("f-splunk").value.trim(),
+    primaryQuery: document.getElementById("f-primary-query").value.trim(),
     investigation: {
       detectionAnalysis: readStepRows("det-steps"),
       containment: readStepRows("cont-steps"),
@@ -889,7 +1035,7 @@ async function deletePlaybook(id) {
 }
 
 function resetForm(rebuild = true) {
-  ["f-name", "f-scenario", "f-detection", "f-splunk"].forEach((id) => {
+  ["f-name", "f-scenario", "f-detection", "f-primary-query"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
@@ -918,6 +1064,30 @@ function validateSigma(ruleText) {
   }
 }
 
+function printPlaybook() {
+  window.print();
+}
+
+function exportSoar(pbId) {
+  const pb = getPlaybookById(pbId);
+  if (!pb) return;
+  const payload = {
+    format: "soc-playbook-soar-v1",
+    exportedAt: new Date().toISOString(),
+    id: pb.id, name: pb.name, type: pb.type,
+    severity: pb.severity || pb.sev, category: pb.cat,
+    mitre: pb.mitre, scenario: pb.scenario,
+    investigation: pb.investigation
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `soar-${pb.id}-${(pb.name || '').replace(/[^a-z0-9]/gi,'_').toLowerCase()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 async function refreshData() {
   await loadCustomPlaybooks();
   buildMergedPlaybooks();
@@ -927,8 +1097,34 @@ async function refreshData() {
   renderNavigatorPanel();
 }
 
+function updatePrimaryQueryLabel() {
+  const tool = state.activeTools[0] || "splunk";
+  const toolLabel = ALL_TOOLS[tool]?.label || tool;
+  const lbl = document.getElementById("f-primary-query-label");
+  const ta  = document.getElementById("f-primary-query");
+  if (lbl) lbl.innerHTML = `Primary ${toolLabel} query <span style="font-weight:400;color:var(--text3)">(optional)</span>`;
+  if (ta)  ta.placeholder = `Enter an initial triage query for ${toolLabel}…`;
+}
+
+async function loadToolConfig() {
+  try {
+    const r = await fetch("cgi-bin/get_config.sh");
+    if (!r.ok) return;
+    const cfg = await r.json();
+    if (Array.isArray(cfg.tools) && cfg.tools.length > 0) {
+      const valid = cfg.tools.filter(t => ALL_TOOLS[t]).slice(0, 6);
+      if (valid.length > 0) state.activeTools = valid;
+    }
+  } catch (_) { /* network error or CGI unavailable — use defaults */ }
+  DEFAULT_TOOL = state.activeTools.includes(DEFAULT_TOOL_FALLBACK)
+    ? DEFAULT_TOOL_FALLBACK
+    : state.activeTools[0];
+  updatePrimaryQueryLabel();
+}
+
 async function init() {
   try {
+    await loadToolConfig();
     await loadMitreTechniques();
     await loadManifest();
     await loadLibraryDetails();
@@ -987,5 +1183,386 @@ window.updateMitreInputHint = updateMitreInputHint;
 window.updateNavigatorLayer = updateNavigatorLayer;
 window.downloadNavigatorLayer = downloadNavigatorLayer;
 window.openNavigatorInNewTab = openNavigatorInNewTab;
+window.filterSeverity = filterSeverity;
+window.filterSource = filterSource;
+window.filterSourceSelect = filterSourceSelect;
+window.filterSeveritySelect = filterSeveritySelect;
+window.toggleChecklist = toggleChecklist;
+window.toggleChecklistStep = toggleChecklistStep;
+window.resetChecklist = resetChecklist;
+window.printPlaybook = printPlaybook;
+window.exportSoar = exportSoar;
+window.toggleTheme = toggleTheme;
+window.openWizard = openWizard;
+window.closeWizard = closeWizard;
+window.wizardNext = wizardNext;
+window.wizardPrev = wizardPrev;
+window.wizardSave = wizardSave;
+window.addWizardMitreTag = addWizardMitreTag;
+window.removeWizardMitreTag = removeWizardMitreTag;
+window.addWizardStep = addWizardStep;
 
-document.addEventListener("DOMContentLoaded", init);
+// ── WIZARD ──────────────────────────────────────────────────────────────────
+const WIZARD_STEPS = [
+  { id: "basic",     title: "Basic Info"      },
+  { id: "context",   title: "Context"         },
+  { id: "detection", title: "Detection"       },
+  { id: "det",       title: "Analysis Steps"  },
+  { id: "cont",      title: "Containment"     },
+  { id: "erad",      title: "Eradication"     },
+  { id: "rec",       title: "Recovery"        },
+  { id: "review",    title: "Review & Save"   },
+];
+
+const wizardData = {
+  name: "", scenario: "", cat: "", sev: "high",
+  detection: "", mitreTags: [], primaryQuery: "",
+  detSteps: [], contSteps: [], eradSteps: [], recSteps: [],
+};
+
+let wizardStep = 0;
+
+function openWizard() {
+  Object.assign(wizardData, {
+    name: "", scenario: "", cat: "", sev: "high",
+    detection: "", mitreTags: [], primaryQuery: "",
+    detSteps: [], contSteps: [], eradSteps: [], recSteps: [],
+  });
+  wizardStep = 0;
+  const overlay = document.getElementById("wizard-overlay");
+  if (overlay) overlay.style.display = "flex";
+  renderWizardStep();
+}
+
+function closeWizard() {
+  const overlay = document.getElementById("wizard-overlay");
+  if (overlay) overlay.style.display = "none";
+}
+
+function renderWizardProgress() {
+  const prog = document.getElementById("wiz-progress");
+  if (!prog) return;
+  prog.innerHTML = WIZARD_STEPS.map((s, i) => {
+    const cls = i < wizardStep ? "done" : i === wizardStep ? "active" : "";
+    return `<div class="wiz-step-dot ${cls}" title="${esc(s.title)}">
+      <span class="wiz-dot-num">${i < wizardStep ? "✓" : i + 1}</span>
+      <span class="wiz-dot-label">${esc(s.title)}</span>
+    </div>`;
+  }).join("");
+}
+
+function renderWizardStep() {
+  renderWizardProgress();
+  const numEl = document.getElementById("wiz-step-num");
+  if (numEl) numEl.textContent = wizardStep + 1;
+  const labelEl = document.getElementById("wiz-step-label");
+  if (labelEl) labelEl.textContent = WIZARD_STEPS[wizardStep].title;
+
+  const body = document.getElementById("wiz-body");
+  if (body) {
+    body.innerHTML = wizardStepContent();
+    body.scrollTop = 0;
+  }
+
+  const prev = document.getElementById("wiz-prev");
+  const next = document.getElementById("wiz-next");
+  if (prev) prev.style.visibility = wizardStep === 0 ? "hidden" : "visible";
+  if (next) {
+    const isLast = wizardStep === WIZARD_STEPS.length - 1;
+    next.style.display = isLast ? "none" : "";
+    next.textContent = wizardStep === WIZARD_STEPS.length - 2 ? "Review →" : "Next →";
+  }
+
+  // Populate step builders after DOM is ready
+  if (wizardStep === 3) populateWizardStepBuilder("wiz-det-steps",  wizardData.detSteps);
+  if (wizardStep === 4) populateWizardStepBuilder("wiz-cont-steps", wizardData.contSteps);
+  if (wizardStep === 5) populateWizardStepBuilder("wiz-erad-steps", wizardData.eradSteps);
+  if (wizardStep === 6) populateWizardStepBuilder("wiz-rec-steps",  wizardData.recSteps);
+
+  // Re-render MITRE tags on context step
+  if (wizardStep === 1) setTimeout(() => renderWizardMitreTags(), 0);
+
+  // Update primary query label
+  if (wizardStep === 2) {
+    const first = state.activeTools[0];
+    const lbl = first ? (ALL_TOOLS[first]?.label || first) : "Primary";
+    const el = document.getElementById("wiz-primary-query-label");
+    if (el) el.innerHTML = `${esc(lbl)} query <span style="font-weight:400;color:var(--text3)">(optional)</span>`;
+  }
+}
+
+function wizardStepContent() {
+  const d = wizardData;
+  const cats = ["Malware","Insider Threat","Cloud","Identity","Application","Network","Supply Chain","Data","Other"];
+  const sevs = [["critical","Critical"],["high","High"],["medium","Medium"],["low","Low"]];
+
+  switch (wizardStep) {
+    case 0:
+      return `
+        <div class="wiz-step-intro">Enter the basic identifying details for your new playbook.</div>
+        <div class="form-grid">
+          <div class="form-group form-full">
+            <label class="form-label">Playbook title <span>*</span></label>
+            <input class="form-input" id="wiz-name" value="${esc(d.name)}" placeholder="e.g. Suspicious PowerShell Execution" maxlength="80">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Category <span>*</span></label>
+            <select class="form-select" id="wiz-cat">
+              <option value="">Select category...</option>
+              ${cats.map(c => `<option value="${c}"${d.cat===c?" selected":""}>${c}</option>`).join("")}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Severity</label>
+            <select class="form-select" id="wiz-sev">
+              ${sevs.map(([v,l]) => `<option value="${v}"${d.sev===v?" selected":""}>${l}</option>`).join("")}
+            </select>
+          </div>
+        </div>`;
+
+    case 1:
+      return `
+        <div class="wiz-step-intro">Describe what this playbook covers and map it to MITRE ATT&amp;CK techniques.</div>
+        <div class="form-grid">
+          <div class="form-group form-full">
+            <label class="form-label">Scenario description <span>*</span></label>
+            <textarea class="form-textarea" id="wiz-scenario" rows="5" placeholder="Describe the alert scenario and what has been detected...">${esc(d.scenario)}</textarea>
+          </div>
+          <div class="form-group form-full">
+            <label class="form-label">MITRE ATT&amp;CK technique IDs</label>
+            <div class="mitre-input-row">
+              <input class="mitre-tag-input" id="wiz-mitre-input" list="mitre-id-suggestions" placeholder="T1059.001" maxlength="20" oninput="updateMitreInputHint(this.value)">
+              <button class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="addWizardMitreTag()">+ Add</button>
+            </div>
+            <div id="wiz-mitre-help" class="mitre-input-help">Enter ATT&amp;CK ID (e.g. T1059.001). Click a tag to open the ATT&amp;CK page.</div>
+            <div id="wiz-mitre-display" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px"></div>
+          </div>
+        </div>`;
+
+    case 2:
+      return `
+        <div class="wiz-step-intro">Specify detection data sources and provide an initial triage query.</div>
+        <div class="form-grid">
+          <div class="form-group form-full">
+            <label class="form-label">Detection sources</label>
+            <input class="form-input" id="wiz-detection" value="${esc(d.detection)}" placeholder="e.g. Windows Security logs, firewall, DNS, EDR alerts">
+          </div>
+          <div class="form-group form-full">
+            <label class="form-label" id="wiz-primary-query-label">Primary investigation query <span style="font-weight:400;color:var(--text3)">(optional)</span></label>
+            <textarea class="form-textarea" id="wiz-primary-query" rows="5" style="font-family:var(--mono);font-size:12px" placeholder="Enter an initial triage query...">${esc(d.primaryQuery)}</textarea>
+          </div>
+        </div>`;
+
+    case 3:
+    case 4:
+    case 5:
+    case 6: {
+      const phaseLabels = ["Detection &amp; Analysis", "Containment", "Eradication", "Recovery &amp; Lessons Learned"];
+      const phaseDescs  = [
+        "Add investigation and analysis steps for this incident type.",
+        "Add steps to contain the threat and limit further damage.",
+        "Add steps to remove the threat and harden the environment.",
+        "Add steps to restore systems and capture lessons learned.",
+      ];
+      const containerIds = ["wiz-det-steps","wiz-cont-steps","wiz-erad-steps","wiz-rec-steps"];
+      const idx = wizardStep - 3;
+      return `
+        <div class="wiz-step-intro">${phaseDescs[idx]}</div>
+        <div class="step-builder">
+          <div class="step-builder-head">${phaseLabels[idx]}
+            <button class="btn btn-secondary" style="padding:3px 9px;font-size:11px" onclick="addWizardStep('${containerIds[idx]}')">+ Step</button>
+          </div>
+          <div class="step-builder-body" id="${containerIds[idx]}"></div>
+          <div class="add-step-btn" onclick="addWizardStep('${containerIds[idx]}')">+ Add step</div>
+        </div>`;
+    }
+
+    case 7: {
+      const stepCounts = [
+        ["Analysis", d.detSteps.length],
+        ["Containment", d.contSteps.length],
+        ["Eradication", d.eradSteps.length],
+        ["Recovery", d.recSteps.length],
+      ];
+      return `
+        <div class="wiz-step-intro">Review your playbook. Click <strong>Save Playbook</strong> to publish it to the library.</div>
+        <div class="wiz-review">
+          <div class="wiz-review-row"><span class="wiz-review-label">Title</span><span>${esc(d.name || "(not set)")}</span></div>
+          <div class="wiz-review-row"><span class="wiz-review-label">Category</span><span>${esc(d.cat || "(not set)")}</span></div>
+          <div class="wiz-review-row"><span class="wiz-review-label">Severity</span><span>${esc(d.sev)}</span></div>
+          <div class="wiz-review-row"><span class="wiz-review-label">Scenario</span><span style="white-space:pre-wrap">${esc(d.scenario ? d.scenario.substring(0,200)+(d.scenario.length>200?"…":"") : "(not set)")}</span></div>
+          <div class="wiz-review-row"><span class="wiz-review-label">MITRE Tags</span><span>${d.mitreTags.length ? d.mitreTags.map(t=>`<span class="badge b-teal">${esc(t)}</span>`).join(" ") : "(none)"}</span></div>
+          <div class="wiz-review-row"><span class="wiz-review-label">Detection Sources</span><span>${esc(d.detection || "(not set)")}</span></div>
+          <div class="wiz-review-row"><span class="wiz-review-label">Primary Query</span><span>${d.primaryQuery ? '<span class="badge b-blue">✓ provided</span>' : "(not set)"}</span></div>
+          ${stepCounts.map(([lbl,cnt]) => `<div class="wiz-review-row"><span class="wiz-review-label">${lbl} Steps</span><span>${cnt} step${cnt!==1?"s":""}</span></div>`).join("")}
+        </div>
+        <div class="wiz-review-save">
+          <button class="btn btn-primary" style="font-size:14px;padding:8px 22px" onclick="wizardSave()">💾 Save Playbook</button>
+          <button class="btn btn-secondary" onclick="wizardStep=0;renderWizardStep()">← Edit from Start</button>
+        </div>`;
+    }
+
+    default: return "";
+  }
+}
+
+function renderWizardMitreTags() {
+  const host = document.getElementById("wiz-mitre-display");
+  if (!host) return;
+  host.innerHTML = wizardData.mitreTags.map(tag => {
+    const info = getMitreTechniqueInfo(tag);
+    const name = info?.name ? `<span class="mitre-chip-name">${esc(info.name)}</span>` : "";
+    return `<span class="mitre-chip">${renderMitreLink(tag, false)}${name}<button class="mitre-chip-remove" onclick="removeWizardMitreTag('${esc(tag)}')" aria-label="Remove ${esc(tag)}">×</button></span>`;
+  }).join("");
+}
+
+function addWizardMitreTag() {
+  const input = document.getElementById("wiz-mitre-input");
+  if (!input) return;
+  const value = normalizeMitreId(input.value);
+  if (!value) return;
+  if (!wizardData.mitreTags.includes(value)) wizardData.mitreTags.push(value);
+  input.value = "";
+  renderWizardMitreTags();
+}
+
+function removeWizardMitreTag(tag) {
+  wizardData.mitreTags = wizardData.mitreTags.filter(t => t !== tag);
+  renderWizardMitreTags();
+}
+
+function addWizardStep(containerId) {
+  const body = document.getElementById(containerId);
+  if (!body) return;
+  const index = body.querySelectorAll(".step-row").length;
+  body.insertAdjacentHTML("beforeend", stepRowTemplate(index, {}));
+}
+
+function populateWizardStepBuilder(containerId, steps) {
+  const body = document.getElementById(containerId);
+  if (!body) return;
+  body.innerHTML = "";
+  if (!steps.length) {
+    addWizardStep(containerId);
+  } else {
+    steps.forEach((s, i) => body.insertAdjacentHTML("beforeend", stepRowTemplate(i, s)));
+  }
+}
+
+function wizardSaveCurrentStep() {
+  switch (wizardStep) {
+    case 0:
+      wizardData.name = document.getElementById("wiz-name")?.value.trim() || "";
+      wizardData.cat  = document.getElementById("wiz-cat")?.value || "";
+      wizardData.sev  = document.getElementById("wiz-sev")?.value || "high";
+      break;
+    case 1:
+      wizardData.scenario = document.getElementById("wiz-scenario")?.value.trim() || "";
+      break;
+    case 2:
+      wizardData.detection    = document.getElementById("wiz-detection")?.value.trim() || "";
+      wizardData.primaryQuery = document.getElementById("wiz-primary-query")?.value.trim() || "";
+      break;
+    case 3: wizardData.detSteps  = readStepRows("wiz-det-steps");  break;
+    case 4: wizardData.contSteps = readStepRows("wiz-cont-steps"); break;
+    case 5: wizardData.eradSteps = readStepRows("wiz-erad-steps"); break;
+    case 6: wizardData.recSteps  = readStepRows("wiz-rec-steps");  break;
+  }
+}
+
+function wizardValidateStep() {
+  switch (wizardStep) {
+    case 0:
+      if (!document.getElementById("wiz-name")?.value.trim()) {
+        alert("Please enter a playbook title.");
+        return false;
+      }
+      if (!document.getElementById("wiz-cat")?.value) {
+        alert("Please select a category.");
+        return false;
+      }
+      break;
+    case 1:
+      if (!document.getElementById("wiz-scenario")?.value.trim()) {
+        alert("Please enter a scenario description.");
+        return false;
+      }
+      break;
+  }
+  return true;
+}
+
+function wizardNext() {
+  if (!wizardValidateStep()) return;
+  wizardSaveCurrentStep();
+  wizardStep = Math.min(wizardStep + 1, WIZARD_STEPS.length - 1);
+  renderWizardStep();
+}
+
+function wizardPrev() {
+  wizardSaveCurrentStep();
+  wizardStep = Math.max(wizardStep - 1, 0);
+  renderWizardStep();
+}
+
+async function wizardSave() {
+  const { name, scenario, cat, sev, detection, mitreTags, primaryQuery,
+          detSteps, contSteps, eradSteps, recSteps } = wizardData;
+
+  if (!name || !scenario || !cat) {
+    alert("Please complete the title, scenario, and category (steps 1 & 2).");
+    return;
+  }
+
+  const payload = {
+    name, scenario, cat, sev, type: cat, source: "custom",
+    detection, mitre: [...mitreTags], primaryQuery,
+    investigation: {
+      detectionAnalysis: detSteps,
+      containment: contSteps,
+      eradication: eradSteps,
+      recovery: recSteps,
+    }
+  };
+
+  try {
+    const res = await fetch(API_SAVE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json();
+    if (!res.ok || body.error) throw new Error(body.error || "Failed to save playbook");
+    closeWizard();
+    await refreshData();
+    showPanel("home", document.getElementById("nav-home"));
+  } catch (err) {
+    alert(err.message || "Unable to save playbook.");
+  }
+}
+
+function initTheme() {
+  const stored = localStorage.getItem('pb-theme') || 'dark';
+  applyTheme(stored, false);
+}
+
+function applyTheme(theme, save = true) {
+  document.documentElement.setAttribute('data-theme', theme);
+  if (save) localStorage.setItem('pb-theme', theme);
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.textContent = theme === 'dark' ? '☀' : '🌙';
+  const lightLink = document.getElementById('hljs-light');
+  const darkLink  = document.getElementById('hljs-dark');
+  if (lightLink) lightLink.disabled = (theme === 'dark');
+  if (darkLink)  darkLink.disabled  = (theme === 'light');
+  if (window.hljs) {
+    document.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+  }
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+document.addEventListener("DOMContentLoaded", () => { initTheme(); init(); });

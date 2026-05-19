@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SOC IR Playbook Library</title>
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css">
+<link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css" disabled>
+<link id="hljs-dark"  rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
 </head>
 <body>
 <button class="mobile-nav-toggle" id="mobile-nav-toggle" onclick="toggleMobileNav()" aria-label="Open navigation" aria-expanded="false">☰</button>
@@ -13,9 +14,25 @@
 <div class="layout">
 
 <div class="sidebar" id="sidebar">
-  <div class="sb-head">
+<div class="sb-head">
+  <div class="sb-head-text">
     <div class="sb-title">SOC Playbook Library</div>
-    <div class="sb-sub">Splunk · KQL · Sigma · Velociraptor · Carbon Black · v4.0</div>
+    <div class="sb-sub">Security Onion · Sysmon · OSQuery · Velociraptor · v4.0</div>
+  </div>
+  <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle light/dark theme">☀</button>
+</div>
+  <div class="sb-create-wrap">
+    <button class="sb-create-btn" id="nav-create" onclick="showPanel('create',this)">
+      <span class="sb-create-icon">＋</span>
+      <span class="sb-create-label">
+        <span class="sb-create-main">Create Playbook</span>
+        <span class="sb-create-sub">Build a custom IR runbook</span>
+      </span>
+    </button>
+    <button class="sb-wizard-btn" onclick="openWizard()" title="Guided step-by-step wizard">
+      <span class="sb-wizard-icon">🧙</span>
+      <span class="sb-wizard-label">Use Wizard</span>
+    </button>
   </div>
   <div class="sb-search">
     <input type="text" id="sb-search" placeholder="Search playbooks..." oninput="searchNav(this.value)">
@@ -30,7 +47,6 @@
         <div class="nav-item active" id="nav-home" onclick="showPanel('home',this)">All playbooks</div>
         <div class="nav-item" id="nav-base" onclick="showPanel('base',this)">Base alert procedure</div>
         <div class="nav-item nav-item-navigator" id="nav-navigator" onclick="showPanel('navigator',this)">MITRE Navigator</div>
-        <div class="nav-item" id="nav-create" onclick="showPanel('create',this)"><span class="dot d-custom"></span>Create playbook</div>
       </div>
     </div>
     <div id="dyn-nav"></div>
@@ -44,12 +60,12 @@
   <div class="ph">
     <div class="ph-ey">SOC Incident Response</div>
     <div class="ph-ti">Playbook Library</div>
-    <div class="ph-su">Splunk SIEM &middot; Network &amp; traffic logs &middot; MITRE ATT&amp;CK mapped</div>
+    <div class="ph-su">Security Onion &middot; Sysmon &middot; OSQuery &middot; MITRE ATT&amp;CK mapped</div>
     <div class="ph-me">
       <span class="badge b-gray" id="pb-count-badge">0 playbooks</span>
-      <span class="badge b-amber">Splunk SPL</span>
-      <span class="badge b-blue">KQL · QRadar</span>
-      <span class="badge b-purple">Sigma</span>
+      <span class="badge b-amber">Security Onion</span>
+      <span class="badge b-blue">Sysmon XML</span>
+      <span class="badge b-purple">OSQuery SQL</span>
       <span class="badge b-green">Velociraptor VQL</span>
       <span class="badge b-red">Carbon Black EDR</span>
       <span class="badge b-teal">MITRE mapped</span>
@@ -69,8 +85,31 @@
     <button class="filter-btn" onclick="filterCards('Supply Chain',this)">Supply Chain</button>
     <button class="filter-btn" onclick="filterCards('Data',this)">Data</button>
     <button class="filter-btn" onclick="filterCards('Network',this)">Network</button>
+    <button class="filter-btn" onclick="filterCards('Threat Groups',this)">Threat Groups</button>
     <button class="filter-btn" onclick="filterCards('Custom',this)">Custom</button>
   </div>
+      <div class="sev-filter-bar" id="sevFilterBar" style="display:none"></div>
+      <div class="source-filter-bar" style="display:none"></div>
+      <div class="inline-filter-row">
+        <div class="inline-filter-group">
+          <label class="inline-filter-label" for="sev-select">Severity</label>
+          <select class="inline-filter-select" id="sev-select" onchange="filterSeveritySelect(this.value)">
+            <option value="all">All severities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div class="inline-filter-group">
+          <label class="inline-filter-label" for="source-select">Source</label>
+          <select class="inline-filter-select" id="source-select" onchange="filterSourceSelect(this.value)">
+            <option value="all">All sources</option>
+            <option value="library">📚 Default</option>
+            <option value="custom">✏️ Custom / Edited</option>
+          </select>
+        </div>
+      </div>
   <div class="cards" id="cards-grid"></div>
 </div>
 
@@ -169,8 +208,8 @@
       </select>
     </div>
     <div class="form-group form-full">
-      <label class="form-label">Detection sources (Splunk sourcetypes / tools)</label>
-      <input class="form-input" id="f-detection" placeholder="e.g. sourcetype=firewall, sourcetype=dns, EDR alerts">
+      <label class="form-label">Detection sources <span style="font-weight:400;color:var(--text3)">(e.g. log sources, sourcetypes, EDR telemetry)</span></label>
+      <input class="form-input" id="f-detection" placeholder="e.g. Windows Security logs, firewall, DNS, EDR alerts">
     </div>
     <div class="form-group form-full">
       <label class="form-label">MITRE ATT&amp;CK technique IDs</label>
@@ -185,8 +224,8 @@
       <div id="mitre-tags-display" style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px"></div>
     </div>
     <div class="form-group form-full">
-      <label class="form-label">Splunk investigation query</label>
-      <textarea class="form-textarea" id="f-splunk" placeholder="index=network sourcetype=... | stats count by src_ip, dest_ip | ..." rows="3" style="font-family:var(--mono);font-size:12px"></textarea>
+      <label class="form-label" id="f-primary-query-label">Primary investigation query <span style="font-weight:400;color:var(--text3)">(optional)</span></label>
+      <textarea class="form-textarea" id="f-primary-query" placeholder="Enter an initial triage query for your primary SIEM/tool..." rows="3" style="font-family:var(--mono);font-size:12px"></textarea>
     </div>
   </div>
 
@@ -223,6 +262,28 @@
 
 </div><!-- /main -->
 </div><!-- /layout -->
+
+<!-- PLAYBOOK WIZARD OVERLAY -->
+<div id="wizard-overlay" class="wizard-overlay" style="display:none" role="dialog" aria-modal="true" aria-label="Create Playbook Wizard">
+  <div class="wizard-panel">
+    <div class="wizard-header">
+      <div>
+        <div class="wizard-title">Create Playbook — Step <span id="wiz-step-num">1</span> of 8</div>
+        <div class="wizard-step-label" id="wiz-step-label">Basic Info</div>
+      </div>
+      <button class="wizard-close" onclick="closeWizard()" aria-label="Close wizard">×</button>
+    </div>
+    <div class="wizard-progress" id="wiz-progress"></div>
+    <div class="wizard-body" id="wiz-body"></div>
+    <div class="wizard-footer">
+      <button class="btn btn-secondary" id="wiz-prev" onclick="wizardPrev()">← Back</button>
+      <div class="wizard-footer-right">
+        <button class="btn btn-secondary" onclick="closeWizard()">Cancel</button>
+        <button class="btn btn-primary" id="wiz-next" onclick="wizardNext()">Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
