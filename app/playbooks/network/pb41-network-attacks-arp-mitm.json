@@ -1,0 +1,149 @@
+{
+  "id": "pb41",
+  "num": 41,
+  "name": "ARP Spoofing / MITM / Port Scanning",
+  "fullName": "ARP Spoofing / Man-in-the-Middle / Port Scanning",
+  "type": "Network – Man-in-the-Middle / Reconnaissance",
+  "severity": "High",
+  "priority": "High (may precede credential theft, data interception, or lateral movement)",
+  "detection": "Network logs (Zeek, Suricata, NetFlow), SIEM, NDR, ARP monitoring (dynamic ARP inspection)",
+  "scenario": "Network monitoring detects ARP cache poisoning, suspicious port scanning activity from an internal host, or evidence of a man-in-the-middle attack such as duplicate ARP responses, SSL stripping, unusual traffic interception patterns, or a rogue host sending gratuitous ARPs. May indicate insider threat or an attacker who has already gained initial access.",
+  "mitre": "T1557.002, T1046, T1040, T1018",
+  "tools": "SIEM (Splunk, Sentinel); Network logs (Zeek, Suricata, NetFlow, sFlow); NDR; SNMP / switch port monitoring; Wireshark / packet capture; Velociraptor",
+  "sev": "high",
+  "cat": "Network",
+  "source": "library",
+  "updated": "2026-05-17",
+  "related": ["pb14", "pb17", "pb07"],
+  "detSteps": [
+    {
+      "title": "Detect ARP spoofing — duplicate or conflicting ARP responses",
+      "detail": "ARP spoofing is detected by monitoring for duplicate ARP replies for the same IP from different MAC addresses, or for high rates of gratuitous ARP broadcasts. Key indicators: a single host sends ARP replies for many IP addresses (ARP flooding), the MAC-to-IP mapping changes unexpectedly for a gateway or server, or ARP reply rates spike from a single source. Switches with dynamic ARP inspection (DAI) may log violations.",
+      "queries": {
+        "splunk": "index=network sourcetype=zeek_arp OR sourcetype=dhcp | stats dc(mac) as unique_macs values(mac) as macs by ip | where unique_macs > 1 | sort -unique_macs",
+        "kql": "CommonSecurityLog\n| where TimeGenerated > ago(1h)\n| where DeviceEventClassID contains 'ARP' or Activity contains 'ARP'\n| summarize MACCount=dcount(DestinationMACAddress), MACs=make_set(DestinationMACAddress) by DestinationIP\n| where MACCount > 1\n| order by MACCount desc",
+        "qradar": "SELECT sourceip, \"Source MAC\" as src_mac, destinationip, \"Destination MAC\" as dst_mac, QIDNAME(qid) as event, COUNT(*) as arp_count FROM events WHERE logsourcetypename(devicetype) ILIKE '%ARP%' OR QIDNAME(qid) ILIKE '%ARP%' GROUP BY sourceip, src_mac, destinationip, dst_mac HAVING arp_count > 100 ORDER BY arp_count DESC LAST 30 MINUTES",
+        "sigma": "title: ARP Spoofing — Duplicate MAC for IP\nstatus: experimental\ndescription: Detects ARP spoofing by identifying multiple MAC addresses claiming the same IP address\nlogsource:\n  category: network\n  product: zeek\ndetection:\n  selection:\n    event_type: 'arp'\n  condition: selection\nfalsepositives:\n  - NIC teaming or failover configurations\n  - VM migration events\nlevel: high",
+        "velociraptor": "SELECT * FROM execve(argv=['arp', '-a'])\nUNION ALL\nSELECT HardwareAddress, IPAddress, Type FROM interfaces()",
+        "carbon_black": "netconn_count:[100 TO *] AND NOT (process_name:svchost.exe OR process_name:System)",
+        "sysmon": "<NetworkConnect onmatch=\"include\"><DestinationPort condition=\"is any\">21;22;23;25;53;80;110;139;143;389;443;445;3389;8080;8443</DestinationPort></NetworkConnect>"
+      }
+    },
+    {
+      "title": "Detect port scanning — single host scanning many ports or hosts",
+      "detail": "Port scanning is characterised by a single source IP connecting to many destination ports or many destination hosts in a short time window. Internal port scanning often indicates a compromised host being used for lateral movement reconnaissance. Look for SYN packets without completing the TCP handshake (SYN scan), or UDP probes to unusual port ranges.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall OR sourcetype=zeek_conn | stats dc(dest_port) as ports_scanned, dc(dest_ip) as hosts_scanned by src_ip | where ports_scanned > 50 OR hosts_scanned > 20 | sort -ports_scanned",
+        "kql": "CommonSecurityLog\n| where TimeGenerated > ago(30m)\n| where DeviceAction != 'Deny'\n| summarize PortsScanned=dcount(DestinationPort), HostsScanned=dcount(DestinationIP) by SourceIP\n| where PortsScanned > 50 or HostsScanned > 20\n| order by PortsScanned desc",
+        "qradar": "SELECT sourceip, COUNT(DISTINCT destinationport) as port_count, COUNT(DISTINCT destinationip) as host_count FROM events WHERE logsourcetypename(devicetype) ILIKE '%Firewall%' OR logsourcetypename(devicetype) ILIKE '%IDS%' GROUP BY sourceip HAVING port_count > 50 OR host_count > 20 ORDER BY port_count DESC LAST 30 MINUTES",
+        "sigma": "title: Internal Port Scan Detected\nstatus: experimental\ndescription: Detects internal host scanning many ports or hosts — common reconnaissance pattern before lateral movement\nlogsource:\n  category: firewall\ndetection:\n  selection:\n    dst_port|gt: 0\n  condition: selection\nfalsepositives:\n  - Vulnerability scanners (Nessus, Qualys)\n  - Asset inventory tools\nlevel: medium",
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name\nFROM netstat()\nWHERE State = 'SYN_SENT'\nOR (State = 'ESTABLISHED' AND Rport IN (21,22,23,25,53,139,445,3389,8080,8443))\nORDER BY Rport",
+        "carbon_black": "netconn_count:[50 TO *] AND NOT (process_name:nessus.exe OR process_name:qualys.exe OR process_name:chrome.exe OR process_name:msedge.exe OR process_name:svchost.exe)",
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">nmap;masscan;zmap;scanner</Image></NetworkConnect>"
+      }
+    },
+    {
+      "title": "Detect MITM indicators — SSL stripping, DNS hijacking, traffic interception",
+      "detail": "MITM attacks manifest as SSL certificate mismatches (certificate issuer does not match expected), unexpected DNS response changes (DNS cache poisoning), HTTPS being downgraded to HTTP, or abnormal traffic routing (default gateway MAC changing). Look for certificate errors in proxy logs, DNS answer changes in DNS logs, or ICMP redirect messages being sent from unexpected hosts.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy cs_uri_scheme=http NOT (cs_uri_scheme=https) cs_host IN (\"*.bank*\",\"*.paypal*\",\"accounts.google*\",\"login.microsoft*\") | table _time, src_ip, cs_host, cs_uri_stem",
+        "kql": "DnsEvents\n| where TimeGenerated > ago(1h)\n| where ResultCode == 0\n| summarize Answers=make_set(IPAddresses), AnswerCount=dcount(IPAddresses) by Name\n| where AnswerCount > 3\n| order by AnswerCount desc",
+        "qradar": "SELECT sourceip, \"DNS Query\" as query, \"DNS Response\" as response, COUNT(*) as changes FROM events WHERE logsourcetypename(devicetype) ILIKE '%DNS%' GROUP BY sourceip, \"DNS Query\", \"DNS Response\" HAVING changes > 5 ORDER BY changes DESC LAST 1 HOURS",
+        "sigma": "title: SSL Certificate Mismatch via Proxy\nstatus: experimental\ndescription: Detects SSL certificate errors which may indicate MITM interception\nlogsource:\n  category: proxy\ndetection:\n  selection:\n    sc-status:\n      - '407'\n      - '502'\n    cs-uri-scheme: 'https'\n  condition: selection\nfalsepositives:\n  - Misconfigured TLS inspection proxies\nlevel: medium",
+        "velociraptor": "SELECT * FROM execve(argv=['ipconfig', '/all'])\nUNION ALL\nSELECT * FROM execve(argv=['route', 'print'])",
+        "carbon_black": "netconn_count:[1 TO *] AND (process_name:arpspoof OR process_name:ettercap OR process_name:bettercap OR process_name:mitmf)",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">arpspoof;ettercap;bettercap;mitmf;responder</Image></ProcessCreate>"
+      }
+    },
+    {
+      "title": "Identify the rogue or compromised device",
+      "detail": "Correlate the source IP/MAC of the ARP spoofing or scanning activity with your DHCP logs, switch port CAM tables, and CMDB to identify the physical device and its owner. Determine whether the host is a known asset, an unauthorised device, or a known asset that may be compromised. Pull all recent activity from that host across all log sources.",
+      "queries": {
+        "splunk": "index=network sourcetype=dhcp | search ip=[suspect_ip] OR mac=[suspect_mac] | table _time, ip, mac, hostname, lease_duration | sort _time",
+        "kql": "CommonSecurityLog\n| where SourceIP == '<suspect_ip>'\n| where TimeGenerated > ago(24h)\n| summarize Events=count(), EventTypes=make_set(DeviceEventClassID) by SourceIP, SourceMACAddress, DeviceVendor\n| order by Events desc",
+        "qradar": "SELECT sourceip, \"Source MAC\" as mac, username, QIDNAME(qid) as event, starttime FROM events WHERE sourceip = '<suspect_ip>' ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": "SELECT InterfaceName, HardwareAddress, IPAddress, MTU\nFROM interfaces()\nUNION ALL\nSELECT * FROM execve(argv=['ipconfig', '/all'])",
+        "carbon_black": "hostname:<suspect_host> AND netconn_count:[1 TO *]",
+        "sysmon": null
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Isolate the rogue device at the network switch level",
+      "detail": "Work with network engineering to shut down or VLAN-isolate the switch port associated with the rogue host. If the device is wireless, deauthenticate it and block its MAC on the wireless controller. Apply a firewall ACL to block all traffic from the source IP. If the host is a known asset that appears compromised, trigger the standard endpoint isolation procedure.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall src_ip=[rogue_ip] | timechart count span=5m",
+        "kql": "CommonSecurityLog\n| where SourceIP == '<rogue_ip>'\n| where TimeGenerated > ago(4h)\n| summarize TrafficVolume=count() by bin(TimeGenerated, 5m), SourceIP, DestinationIP\n| order by TimeGenerated desc",
+        "qradar": "SELECT destinationip, destinationport, sum(eventcount) as total FROM events WHERE sourceip = '<rogue_ip>' GROUP BY destinationip, destinationport ORDER BY total DESC LAST 2 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": "hostname:<suspect_host> AND netconn_count:[1 TO *]",
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Flush ARP caches on affected network segments",
+      "detail": "Coordinate with server and workstation teams to flush ARP caches on all hosts in the affected VLAN. On Windows hosts, run 'arp -d *'. On network equipment, clear dynamic ARP entries. Enable Dynamic ARP Inspection (DAI) on the affected VLAN if not already configured. On managed switches, review and lock down port-to-MAC mappings.",
+      "queries": {
+        "splunk": "index=network sourcetype=zeek_arp | stats dc(mac) as mac_count values(mac) as macs by ip | where mac_count > 1",
+        "kql": "CommonSecurityLog\n| where Activity contains 'ARP'\n| where TimeGenerated > ago(2h)\n| summarize count() by SourceIP, DestinationIP\n| order by count_ desc",
+        "qradar": "SELECT sourceip, destinationip, QIDNAME(qid) as event FROM events WHERE QIDNAME(qid) ILIKE '%ARP%' ORDER BY starttime DESC LAST 2 HOURS",
+        "sigma": null,
+        "velociraptor": "SELECT * FROM execve(argv=['arp', '-a'])",
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove attacker tooling from compromised host",
+      "detail": "If the scanning or ARP spoofing originated from a compromised internal host, run the full endpoint investigation and remove any network attack tools (nmap, Responder, Bettercap, Ettercap, arpspoof). Check for persistence via scheduled tasks, services, or startup items. Re-image if the scope of compromise is unclear.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4688 ComputerName=[compromised_host] | search NewProcessName IN (\"*nmap*\",\"*responder*\",\"*bettercap*\",\"*ettercap*\",\"*arpspoof*\") | table _time, AccountName, NewProcessName, CommandLine",
+        "kql": "DeviceProcessEvents\n| where DeviceName =~ '<compromised_host>'\n| where FileName in~ ('nmap','nmap.exe','responder','bettercap','ettercap','arpspoof')\n| project TimeGenerated, FileName, ProcessCommandLine, AccountName\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, \"Process Name\" as process, \"Command Line\" as cmdline FROM events WHERE sourceip = '<compromised_ip>' AND (\"Process Name\" ILIKE '%nmap%' OR \"Process Name\" ILIKE '%responder%' OR \"Process Name\" ILIKE '%ettercap%') ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": "SELECT FullPath, Size, Mtime, hash(path=FullPath) as Hash\nFROM glob(globs=['C:/Users/*/Desktop/*', 'C:/Users/*/Downloads/*', 'C:/ProgramData/*'])\nWHERE FullPath =~ '(?i)(nmap|responder|bettercap|ettercap|arpspoof|masscan)'\nORDER BY Mtime DESC",
+        "carbon_black": "hostname:<compromised_host> AND (process_name:nmap.exe OR process_name:responder.exe OR process_name:bettercap OR cmdline:arpspoof)",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">nmap;responder;bettercap;ettercap;arpspoof;masscan</Image></ProcessCreate>"
+      }
+    },
+    {
+      "title": "Harden network controls to prevent recurrence",
+      "detail": "Enable Dynamic ARP Inspection (DAI) and DHCP snooping on all access layer VLANs. Implement 802.1X port authentication to prevent rogue device connections. Consider deploying network-based IDS/IPS (Zeek, Suricata) to detect future scanning or ARP anomalies in real time. Review firewall rules to restrict internal lateral connectivity.",
+      "queries": {
+        "splunk": "index=network sourcetype=firewall | stats count by src_ip, dest_ip, dest_port, action | where action=blocked | sort -count",
+        "kql": "CommonSecurityLog\n| where DeviceAction == 'Deny'\n| where TimeGenerated > ago(24h)\n| summarize BlockedCount=count() by SourceIP, DestinationIP, DestinationPort\n| order by BlockedCount desc",
+        "qradar": "SELECT sourceip, destinationip, destinationport, eventdirection FROM events WHERE eventdirection = 'O' AND logsourcetypename(devicetype) ILIKE '%Firewall%' ORDER BY magnitude DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Monitor affected network segments intensively",
+      "detail": "Deploy or tune network-based detection to alert on ARP anomalies, port scanning, and unusual traffic patterns for 14 days post-incident. Review all logs from the affected VLAN for signs of data interception or credential theft during the MITM window.",
+      "queries": {
+        "splunk": "index=network sourcetype=zeek_conn | stats dc(dest_port) as ports, dc(dest_ip) as hosts by src_ip | where ports > 20 OR hosts > 10 | sort -ports",
+        "kql": "CommonSecurityLog\n| where TimeGenerated > ago(14d)\n| where DeviceAction != 'Deny'\n| summarize Ports=dcount(DestinationPort), Hosts=dcount(DestinationIP) by SourceIP\n| where Ports > 20 or Hosts > 10\n| order by Ports desc",
+        "qradar": "SELECT sourceip, COUNT(DISTINCT destinationport) as ports, COUNT(DISTINCT destinationip) as hosts FROM events WHERE logsourcetypename(devicetype) ILIKE '%Firewall%' GROUP BY sourceip HAVING ports > 20 OR hosts > 10 ORDER BY ports DESC LAST 14 DAYS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "metrics": [
+    { "name": "Detection Time", "target": "<5 minutes from ARP anomaly or scan threshold alert" },
+    { "name": "Switch Port Isolation", "target": "<10 minutes from detection" },
+    { "name": "ARP Cache Flush", "target": "<30 minutes across affected VLAN" },
+    { "name": "DAI Deployment", "target": "Within 48 hours of incident" }
+  ]
+}

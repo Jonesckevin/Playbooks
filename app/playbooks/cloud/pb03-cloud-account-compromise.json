@@ -19,8 +19,8 @@
       "detail": "Look for failed logins, impossible travel (same account logging in from two distant geolocations within minutes), MFA bypass attempts, or first-time logins from unknown IPs. Correlate with SIEM alerts from CASB or cloud-native logging.",
       "queries": {
         "splunk": "index=cloud sourcetype=azure_ad OR sourcetype=gws_admin | search action=failed_login OR action=mfa_bypass | stats count by user, src_ip, location | sort -count",
-        "kql": null,
-        "qradar": null,
+        "kql": "SigninLogs\n| where TimeGenerated > ago(24h)\n| where ResultType != 0\n| summarize FailCount=count(), Locations=make_set(tostring(LocationDetails.countryOrRegion)) by UserPrincipalName, IPAddress\n| where FailCount > 5\n| order by FailCount desc",
+        "qradar": "SELECT username, sourceip, COUNT(*) as failures FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND \"Result\" = 'Failure' GROUP BY username, sourceip HAVING failures > 5 ORDER BY failures DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -32,8 +32,8 @@
       "detail": "Match the attacker's IP against known threat feeds, TOR exit node lists, VPN/proxy infrastructure, and residential proxy ranges. A login from a known-bad IP is a strong indicator of credential theft rather than legitimate access.",
       "queries": {
         "splunk": "index=cloud src_ip=[suspicious_ip] | stats count by user, action, src_ip | sort _time",
-        "kql": null,
-        "qradar": null,
+        "kql": "SigninLogs\n| where TimeGenerated > ago(24h)\n| where IPAddress == '<suspicious_ip>'\n| project TimeGenerated, UserPrincipalName, IPAddress, AppDisplayName, ResultType, LocationDetails\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, sourceip, QIDNAME(qid) as event, starttime FROM events WHERE sourceip = '<suspicious_ip>' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -45,8 +45,8 @@
       "detail": "Check what the account accessed after the suspicious login: mailbox access, file downloads, IAM changes, admin panel access, or API calls. Look for auto-forwarding rules, new OAuth grants, or new admin account creation.",
       "queries": {
         "splunk": "index=cloud user=[suspect_user] earliest=[login_time] | stats count by action, resource | sort _time",
-        "kql": null,
-        "qradar": null,
+        "kql": "AuditLogs\n| where TimeGenerated > ago(24h)\n| where InitiatedBy.user.userPrincipalName == '<suspect_user>'\n| project TimeGenerated, OperationName, TargetResources, InitiatedBy\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, \"Target\" as resource, starttime FROM events WHERE username = '<suspect_user>' AND logsourcetypename(devicetype) ILIKE '%Azure AD%' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
         "carbon_black": null,
@@ -58,8 +58,8 @@
       "detail": "Attackers who compromise cloud accounts often attempt to escalate or establish persistence by creating backdoor accounts, granting themselves admin roles, or adding OAuth apps with broad permissions.",
       "queries": {
         "splunk": "index=cloud sourcetype=azure_ad EventCode IN (4720,4728,4732) | table _time, user, target_user, action | sort _time",
-        "kql": null,
-        "qradar": null,
+        "kql": "AuditLogs\n| where TimeGenerated > ago(24h)\n| where OperationName in ('Add member to role','Create user','Add app role assignment to service principal')\n| extend Actor = tostring(InitiatedBy.user.userPrincipalName)\n| project TimeGenerated, OperationName, Actor, TargetResources\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, \"Target\" as target, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND (QIDNAME(qid) ILIKE '%role%' OR QIDNAME(qid) ILIKE '%Create user%') ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
         "carbon_black": null,
@@ -73,8 +73,8 @@
       "detail": "Immediately invalidate all active sessions, access tokens, and refresh tokens for the compromised account via the identity platform admin console. This terminates the attacker's current access even if they hold a valid token.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "AuditLogs\n| where TimeGenerated > ago(1h)\n| where OperationName in ('Revoke session','User registered security info')\n| project TimeGenerated, OperationName, InitiatedBy, TargetResources\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, sourceip, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND QIDNAME(qid) ILIKE '%session%' ORDER BY starttime DESC LAST 1 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -86,8 +86,8 @@
       "detail": "Reset the account password through an admin-initiated flow (not email reset link — attacker may control the mailbox). Enforce MFA enrolment at next login. If MFA was already present, check for SIM-swap or authenticator app bypass.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "AuditLogs\n| where TimeGenerated > ago(24h)\n| where OperationName in ('Reset user password','Change user password')\n| project TimeGenerated, OperationName, InitiatedBy, TargetResources\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND QIDNAME(qid) ILIKE '%password%' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -99,8 +99,8 @@
       "detail": "Apply conditional access or named location blocks for the attacker's IP ranges in Azure AD / Okta / Google Workspace. For TOR exit nodes, apply a blanket TOR block policy if not already in place.",
       "queries": {
         "splunk": "index=cloud src_ip=[attacker_ip] | stats count by user, action | sort _time",
-        "kql": null,
-        "qradar": null,
+        "kql": "SigninLogs\n| where TimeGenerated > ago(24h)\n| where IPAddress == '<attacker_ip>'\n| summarize Attempts=count() by UserPrincipalName, IPAddress, ResultType\n| order by Attempts desc",
+        "qradar": "SELECT sourceip, username, COUNT(*) as attempts, QIDNAME(qid) as event FROM events WHERE sourceip = '<attacker_ip>' AND logsourcetypename(devicetype) ILIKE '%Azure AD%' GROUP BY sourceip, username, event ORDER BY attempts DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -112,8 +112,8 @@
       "detail": "If lateral movement, data access, or admin action was confirmed during the session, suspend the account entirely pending full investigation rather than just resetting credentials.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "AuditLogs\n| where TimeGenerated > ago(24h)\n| where OperationName in ('Disable account','Block user from signing in')\n| project TimeGenerated, OperationName, InitiatedBy, TargetResources\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND (QIDNAME(qid) ILIKE '%disable%' OR QIDNAME(qid) ILIKE '%block%') ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -127,8 +127,8 @@
       "detail": "Check for auto-forwarding rules, inbox filters (mark-as-read and delete), calendar sharing changes, or out-of-office replies configured by the attacker. In M365: Get-InboxRule; in Google Workspace: check Filters and Forwarding.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "OfficeActivity\n| where TimeGenerated > ago(24h)\n| where Operation in ('New-InboxRule','Set-InboxRule','New-TransportRule')\n| where UserId == '<suspect_user>'\n| project TimeGenerated, Operation, UserId, ClientIPAddress, Parameters\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, \"Parameters\" as params, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Office 365%' AND QIDNAME(qid) ILIKE '%InboxRule%' AND username = '<suspect_user>' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -140,8 +140,8 @@
       "detail": "Review all third-party app OAuth consents for the compromised account. Revoke any apps not recognised or approved by IT. Check for apps with read_mail, read_drive, or send_as permissions.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "AuditLogs\n| where TimeGenerated > ago(7d)\n| where OperationName in ('Consent to application','Add OAuth2PermissionGrant')\n| extend Actor = tostring(InitiatedBy.user.userPrincipalName)\n| where Actor == '<suspect_user>'\n| project TimeGenerated, OperationName, Actor, TargetResources\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, \"Target\" as app, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND (QIDNAME(qid) ILIKE '%OAuth%' OR QIDNAME(qid) ILIKE '%consent%') ORDER BY starttime DESC LAST 7 DAYS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -153,8 +153,8 @@
       "detail": "Audit all IAM/RBAC changes made during the attacker's session window. Remove any accounts added to admin groups, any new service principals created, and any permission grants made.",
       "queries": {
         "splunk": "index=cloud sourcetype=azure_ad action=RoleAssignment | stats count by user, target_user, role | sort _time",
-        "kql": null,
-        "qradar": null,
+        "kql": "AuditLogs\n| where TimeGenerated > ago(24h)\n| where OperationName in ('Add member to role','Remove member from role')\n| project TimeGenerated, OperationName, InitiatedBy, TargetResources\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, \"Target\" as target, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND QIDNAME(qid) ILIKE '%role%' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
         "carbon_black": null,
@@ -168,8 +168,8 @@
       "detail": "Before re-enabling the account, confirm: all sessions revoked, inbox rules cleaned, rogue apps removed, admin roles reverted, and MFA enforced. Use a security checklist — do not re-enable based on a verbal confirmation alone.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "AuditLogs\n| where TimeGenerated > ago(24h)\n| where OperationName in ('Enable account','Update user')\n| project TimeGenerated, OperationName, InitiatedBy, TargetResources\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND QIDNAME(qid) ILIKE '%enable%' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -181,8 +181,8 @@
       "detail": "Set enhanced alerting on the recovered account for any login from a new location, new device, or outside business hours. Use CASB or SIEM to flag any new OAuth grants or admin actions.",
       "queries": {
         "splunk": "index=cloud user=[recovered_user] | stats count by action, src_ip, location | timechart count span=1d",
-        "kql": null,
-        "qradar": null,
+        "kql": "SigninLogs\n| where TimeGenerated > ago(30d)\n| where UserPrincipalName == '<recovered_user>'\n| summarize Logins=count() by IPAddress, tostring(LocationDetails.countryOrRegion), bin(TimeGenerated, 1d)\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, sourceip, COUNT(*) as logins, starttime FROM events WHERE username = '<recovered_user>' AND logsourcetypename(devicetype) ILIKE '%Azure AD%' GROUP BY username, sourceip, starttime ORDER BY logins DESC LAST 30 DAYS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -209,4 +209,3 @@
     }
   ]
 }
-

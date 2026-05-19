@@ -1,0 +1,175 @@
+{
+  "id": "pb38",
+  "num": 38,
+  "name": "Phishing / Spearphishing Attack",
+  "fullName": "Phishing / Spearphishing Attack",
+  "type": "Social Engineering – Credential / Malware Delivery",
+  "severity": "High",
+  "priority": "High (Critical if payload executed or credentials captured)",
+  "detection": "Email gateway (Proofpoint, Mimecast, Defender for O365), SIEM, EDR, User Reports",
+  "scenario": "A user receives a malicious email containing a weaponised link or attachment. The campaign may be broad phishing or targeted spearphishing. Indicators include user reports, email gateway alerts, suspicious URL clicks in web proxy logs, or an EDR alert on the endpoint shortly after email delivery.",
+  "mitre": "T1566, T1566.001, T1204.002, T1078, T1539",
+  "tools": "Email gateway (Proofpoint, Mimecast, Defender for O365); SIEM (Splunk, Sentinel); EDR (CrowdStrike, SentinelOne, Defender); Web proxy / DNS logs; Identity provider (Azure AD, Okta)",
+  "sev": "high",
+  "cat": "Identity",
+  "source": "library",
+  "updated": "2026-05-17",
+  "related": ["pb08", "pb20", "pb42"],
+  "detSteps": [
+    {
+      "title": "Identify the malicious email and scope of delivery",
+      "detail": "Locate the original email in the email gateway or SIEM. Record: sender address, sender IP, subject line, attachment hashes or embedded URLs, delivery timestamp, and all recipients. Determine whether this is a single-target spearphish or a broad campaign. Pull the email header to identify relay hops and source AS.",
+      "queries": {
+        "splunk": "index=email sourcetype=proofpoint OR sourcetype=mimecast_siem OR sourcetype=o365:management:activity (action=blocked OR action=delivered OR Operation=\"SendAs\") | eval sender=coalesce(sender,Sender), subject=coalesce(subject,Subject) | stats values(recipient) as recipients, count by sender, subject, action | sort -count",
+        "kql": "EmailEvents\n| where TimeGenerated > ago(24h)\n| where SenderFromAddress contains '<suspicious_domain>' or Subject contains '<subject_keyword>'\n| summarize RecipientCount=dcount(RecipientEmailAddress), Recipients=make_set(RecipientEmailAddress) by SenderFromAddress, Subject, SenderIPv4, DeliveryAction\n| order by RecipientCount desc",
+        "qradar": "SELECT \"Sender\", \"Recipient\", \"Subject\", \"Message-ID\", QIDNAME(qid) as EventName, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Email%' OR logsourcetypename(devicetype) ILIKE '%Proofpoint%' ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": "title: Phishing Email Delivery Detection\nstatus: experimental\ndescription: Detects delivery of emails with suspicious attachments or links from external senders\nlogsource:\n  category: email\ndetection:\n  selection:\n    action:\n      - 'delivered'\n      - 'allow'\n  suspicious_indicators:\n    attachment_type|contains:\n      - '.exe'\n      - '.js'\n      - '.hta'\n      - '.iso'\n      - '.lnk'\n  condition: selection and suspicious_indicators\nfalsepositives:\n  - Legitimate software deliveries\nlevel: medium",
+        "velociraptor": "SELECT * FROM foreach(\n  row=users(),\n  query={\n    SELECT FullPath, Size, Mtime, hash(path=FullPath) as Hash\n    FROM glob(globs=['%APPDATA%/Local/Temp/*.{exe,js,hta,lnk,iso}',\n                     'C:/Users/*/Downloads/*.{exe,js,hta,lnk,iso}',\n                     'C:/Users/*/AppData/Local/Temp/*'])\n    WHERE Mtime > now() - 86400\n    LIMIT 200\n  }\n)",
+        "carbon_black": "filemod_name:*.{exe,js,hta,lnk,iso} AND (process_name:outlook.exe OR process_name:thunderbird.exe OR process_name:chrome.exe OR process_name:msedge.exe) AND filemod_type:CREATE",
+        "sysmon": "<FileCreate onmatch=\"include\"><Image condition=\"contains any\">OUTLOOK.EXE;thunderbird.exe;chrome.exe;msedge.exe;firefox.exe</Image><TargetFilename condition=\"contains any\">.exe;.js;.hta;.lnk;.iso;.vbs;.wsf;.ps1</TargetFilename></FileCreate>"
+      }
+    },
+    {
+      "title": "Examine clicked URLs and downloaded payloads",
+      "detail": "Review web proxy or DNS logs for clicks on the phishing URL. Check whether the link was visited, redirected, or blocked. If a payload was downloaded, retrieve the file hash and check against threat intel. Determine whether the landing page was a credential harvesting page or a malware download. Extract the full redirect chain if available.",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy OR sourcetype=bluecoat OR sourcetype=websense cs_uri_stem=* | search url=[phishing_url_or_domain] | table _time, src_ip, user, url, http_status, bytes, action | sort _time",
+        "kql": "DeviceNetworkEvents\n| where TimeGenerated > ago(24h)\n| where RemoteUrl contains '<phishing_domain>' or RemoteUrl contains '<phishing_keyword>'\n| project TimeGenerated, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName, RemoteUrl, RemoteIP, RemotePort, ActionType\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, username, \"URL\" as url, QIDNAME(qid) as event, magnitude FROM events WHERE logsourcetypename(devicetype) ILIKE '%Proxy%' AND \"URL\" ILIKE '%<phishing_domain>%' ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": "title: Phishing URL Click via Web Proxy\nstatus: experimental\ndescription: Detects user clicking a known phishing or suspicious URL through web proxy\nlogsource:\n  category: proxy\ndetection:\n  selection:\n    c-uri-query|contains:\n      - 'credential'\n      - 'verify'\n      - 'secure-login'\n  filter_legit:\n    cs-host|contains:\n      - 'microsoft.com'\n      - 'google.com'\n  condition: selection and not filter_legit\nfalsepositives:\n  - Legitimate password portals\nlevel: medium",
+        "velociraptor": "SELECT FullPath, Size, Mtime, hash(path=FullPath) as Hash\nFROM glob(globs=['C:/Users/*/Downloads/*', 'C:/Users/*/AppData/Local/Temp/*'])\nWHERE Mtime > now() - 7200\nORDER BY Mtime DESC\nLIMIT 500",
+        "carbon_black": "(process_name:chrome.exe OR process_name:msedge.exe OR process_name:firefox.exe) AND netconn_domain:<phishing_domain>",
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">chrome.exe;msedge.exe;firefox.exe;iexplore.exe</Image><DestinationPort condition=\"is any\">80;443</DestinationPort></NetworkConnect>"
+      }
+    },
+    {
+      "title": "Detect credential harvesting or account compromise post-click",
+      "detail": "If the phishing page was a credential harvester, look for post-delivery sign-in anomalies: impossible travel, new device registration, MFA prompts from unusual locations, or failed/successful logins immediately after the click. Also check for inbox rule creation (mail forwarding) which is a classic BEC follow-on.",
+      "queries": {
+        "splunk": "index=o365 sourcetype=o365:management:activity Operation IN (\"UserLoggedIn\",\"Set-Mailbox\",\"New-InboxRule\",\"UpdateInboxRules\") | eval user=coalesce(UserId,user) | stats count by user, Operation, ClientIPAddress | where Operation IN (\"New-InboxRule\",\"UpdateInboxRules\") OR ClientIPAddress!=\"known_ip_range\"",
+        "kql": "SigninLogs\n| where TimeGenerated > ago(24h)\n| where ResultType == 0\n| extend City = tostring(LocationDetails.city), Country = tostring(LocationDetails.countryOrRegion)\n| summarize Locations=make_set(strcat(City,',',Country)), SigninCount=count() by UserPrincipalName\n| where array_length(Locations) > 1\n| order by SigninCount desc",
+        "qradar": "SELECT username, sourceip, \"Authentication Method\" as method, QIDNAME(qid) as event, magnitude FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' OR logsourcetypename(devicetype) ILIKE '%Okta%' AND eventdirection = 'L2L' ORDER BY magnitude DESC LAST 2 HOURS",
+        "sigma": "title: Suspicious Inbox Rule Created After Phishing\nstatus: experimental\ndescription: Detects new inbox forwarding rules created shortly after a phishing indicator\nlogsource:\n  product: microsoft365\n  service: exchange\ndetection:\n  selection:\n    eventSource: Exchange\n    eventName:\n      - 'New-InboxRule'\n      - 'UpdateInboxRules'\n      - 'Set-Mailbox'\n  condition: selection\nfalsepositives:\n  - Legitimate inbox management\nlevel: high",
+        "velociraptor": "SELECT * FROM foreach(\n  row=Artifact.Windows.Registry.NTUser(userFilter='.*'),\n  query={\n    SELECT Key, Value, Mtime\n    FROM read_reg_key(glob='HKCU/SOFTWARE/Microsoft/Office/*/Outlook/WebView/Inbox/*')\n    WHERE Mtime > now() - 86400\n  }\n)",
+        "carbon_black": "(process_name:outlook.exe OR process_name:chrome.exe) AND cmdline:\"new-inboxrule\" OR cmdline:\"forward\"",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><ParentImage condition=\"end with\">OUTLOOK.EXE</ParentImage><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;mshta.exe</Image></ProcessCreate>"
+      }
+    },
+    {
+      "title": "Identify lateral movement or persistence if payload was executed",
+      "detail": "If the EDR confirms the phishing payload was executed (e.g., macro-enabled Office document spawned a process, or the link led to a drive-by download), investigate for lateral movement, persistence mechanisms, and C2 beaconing. Look for child processes of Office applications, Sysmon Event ID 1 (process create) with suspicious parent, scheduled tasks, registry run keys, and outbound C2 traffic.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4688 ParentProcessName IN (\"*WINWORD.EXE\",\"*EXCEL.EXE\",\"*POWERPNT.EXE\",\"*outlook.exe\") | table _time, ComputerName, AccountName, ParentProcessName, NewProcessName, CommandLine | sort _time",
+        "kql": "DeviceProcessEvents\n| where TimeGenerated > ago(24h)\n| where InitiatingProcessFileName in~ ('WINWORD.EXE','EXCEL.EXE','POWERPNT.EXE','outlook.exe','msedge.exe','chrome.exe')\n| where FileName in~ ('powershell.exe','cmd.exe','wscript.exe','cscript.exe','mshta.exe','rundll32.exe','regsvr32.exe')\n| project TimeGenerated, DeviceName, AccountName, InitiatingProcessFileName, FileName, ProcessCommandLine\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, username, \"Process Name\" as process, \"Parent Process\" as parent, \"Command Line\" as cmdline FROM events WHERE logsourcetypename(devicetype) = 'Microsoft Windows Security Event Log' AND \"Event ID\" = '4688' AND (\"Parent Process\" ILIKE '%WINWORD%' OR \"Parent Process\" ILIKE '%EXCEL%' OR \"Parent Process\" ILIKE '%outlook%') ORDER BY starttime DESC LAST 4 HOURS",
+        "sigma": "title: Office Application Spawning Suspicious Child Process\nstatus: stable\ndescription: Detects Microsoft Office applications spawning shell or script interpreters — common phishing payload execution\nlogsource:\n  category: process_creation\n  product: windows\ndetection:\n  selection_parent:\n    ParentImage|endswith:\n      - '\\WINWORD.EXE'\n      - '\\EXCEL.EXE'\n      - '\\POWERPNT.EXE'\n      - '\\outlook.exe'\n  selection_child:\n    Image|endswith:\n      - '\\powershell.exe'\n      - '\\cmd.exe'\n      - '\\wscript.exe'\n      - '\\cscript.exe'\n      - '\\mshta.exe'\n      - '\\rundll32.exe'\n  condition: selection_parent and selection_child\nfalsepositives:\n  - Macros used for legitimate automation\nlevel: high",
+        "velociraptor": "SELECT Pid, Name, CommandLine, Ppid, CreateTime\nFROM pslist()\nWHERE Ppid IN (\n  SELECT Pid FROM pslist()\n  WHERE Name =~ '(?i)(WINWORD|EXCEL|POWERPNT|outlook|msedge|chrome)'\n)\nAND Name =~ '(?i)(powershell|cmd|wscript|cscript|mshta|rundll32|regsvr32)'\nORDER BY CreateTime DESC",
+        "carbon_black": "parent_name:(WINWORD.EXE EXCEL.EXE POWERPNT.EXE outlook.exe) AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:wscript.exe OR process_name:cscript.exe OR process_name:mshta.exe)",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><ParentImage condition=\"contains any\">WINWORD.EXE;EXCEL.EXE;POWERPNT.EXE;OUTLOOK.EXE</ParentImage><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe;mshta.exe;rundll32.exe;regsvr32.exe</Image></ProcessCreate>"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Block and retract the malicious email",
+      "detail": "Work with the email gateway team to retract all copies of the phishing email from all recipient mailboxes. Apply a sender/subject/URL block rule in the email gateway. If using Defender for O365, use Threat Explorer to purge. Document every mailbox affected and confirm retraction success.",
+      "queries": {
+        "splunk": "index=email sourcetype=o365:management:activity Operation=\"HardDelete\" OR Operation=\"SoftDelete\" | stats count by UserId, AffectedItems | sort -count",
+        "kql": "EmailEvents\n| where TimeGenerated > ago(1h)\n| where SenderFromAddress == '<attacker_email>' or Subject == '<phishing_subject>'\n| summarize count() by RecipientEmailAddress, DeliveryAction, DeliveryLocation\n| order by count_ desc",
+        "qradar": "SELECT \"Recipient\", \"Sender\", \"Subject\", starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Email%' AND \"Sender\" = '<attacker_email>' ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Isolate any endpoint where the payload was confirmed executed",
+      "detail": "If EDR confirms execution of a dropped payload (process spawned from Office or browser, suspicious file creation), immediately network-isolate the host using EDR agent isolation. Preserve the system for forensic acquisition before any remediation. Revoke the user's session tokens across all applications.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode IN (4688, 7045) | search CommandLine IN (\"*powershell*\",\"*cmd*\",\"*mshta*\") | stats count by ComputerName, AccountName, CommandLine | sort -count",
+        "kql": "DeviceProcessEvents\n| where DeviceName == '<affected_device>'\n| where TimeGenerated > ago(4h)\n| project TimeGenerated, FileName, ProcessCommandLine, InitiatingProcessFileName, AccountName\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, username, \"Process Name\" as process, \"Command Line\" as cmdline, magnitude FROM events WHERE sourceip = '<affected_ip>' AND \"Event ID\" IN ('4688','7045') ORDER BY magnitude DESC LAST 4 HOURS",
+        "sigma": null,
+        "velociraptor": "SELECT Pid, Name, CommandLine, Ppid, CreateTime, Username\nFROM pslist()\nWHERE Name =~ '(?i)(powershell|cmd|wscript|cscript|mshta|rundll32)'\nORDER BY CreateTime DESC\nLIMIT 100",
+        "carbon_black": "hostname:<affected_host> AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:mshta.exe)",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;mshta.exe;rundll32.exe</Image></ProcessCreate>"
+      }
+    },
+    {
+      "title": "Reset compromised credentials and revoke active sessions",
+      "detail": "If credential harvesting is confirmed or suspected, force password reset for all affected accounts immediately. Revoke all active OAuth tokens and session cookies. If MFA was configured, verify it remains intact and is not set to an attacker-controlled device. Invalidate any app passwords.",
+      "queries": {
+        "splunk": "index=o365 sourcetype=o365:management:activity Operation IN (\"UserLoggedIn\",\"PasswordResetByUser\",\"PasswordResetByAdmin\") | stats count by UserId, ClientIPAddress | sort _time",
+        "kql": "AuditLogs\n| where TimeGenerated > ago(24h)\n| where OperationName in ('Reset user password','Update user','Disable Per-user MFA')\n| extend Actor = tostring(InitiatedBy.user.userPrincipalName)\n| project TimeGenerated, OperationName, Actor, TargetResources\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, sourceip, QIDNAME(qid) as event, magnitude FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND (QIDNAME(qid) ILIKE '%password reset%' OR QIDNAME(qid) ILIKE '%token revoke%') ORDER BY starttime DESC LAST 4 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove malicious artefacts from affected endpoints",
+      "detail": "Search all endpoints for the payload file hash, dropped scripts, scheduled tasks, and registry run keys created by the attacker. Common drop locations: %TEMP%, %APPDATA%, C:\\ProgramData. Remove identified artefacts. Use EDR to hunt across the fleet for the same IOCs before closing.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode IN (4698, 4702) | table _time, ComputerName, TaskName, TaskContent | sort _time",
+        "kql": "DeviceProcessEvents\n| where FileName in~ ('schtasks.exe','at.exe')\n| where ProcessCommandLine contains '/create' or ProcessCommandLine contains '/sc'\n| project TimeGenerated, DeviceName, AccountName, ProcessCommandLine\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, \"Process Name\" as process, \"Command Line\" as cmdline FROM events WHERE logsourcetypename(devicetype) = 'Microsoft Windows Security Event Log' AND \"Event ID\" IN ('4698','4702') ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": "SELECT Name, Command, Arguments, NextRunTime, Status\nFROM schtasks()\nWHERE Status = 'Ready' OR Status = 'Running'\nORDER BY NextRunTime ASC",
+        "carbon_black": "process_name:schtasks.exe AND cmdline:create",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"end with\">schtasks.exe</Image><CommandLine condition=\"contains\">/create</CommandLine></ProcessCreate>"
+      }
+    },
+    {
+      "title": "Confirm no persistence mechanisms remain",
+      "detail": "Verify that all registry run keys, startup folder entries, scheduled tasks, and services created by the attacker have been removed. Run a second full EDR scan on all affected hosts. Do not reconnect any isolated host until verified clean by at least two independent checks.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4657 ObjectName IN (\"*\\\\Run\\\\\",\"*\\\\RunOnce\\\\\") | table _time, ComputerName, AccountName, ObjectName, ObjectValueName | sort _time",
+        "kql": "DeviceRegistryEvents\n| where TimeGenerated > ago(24h)\n| where RegistryKey has_any ('\\\\Run\\\\','\\\\RunOnce\\\\','\\\\Policies\\\\Explorer\\\\Run')\n| where ActionType == 'RegistryValueSet'\n| project TimeGenerated, DeviceName, InitiatingProcessAccountName, RegistryKey, RegistryValueName, RegistryValueData\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, \"Registry Key\" as key, \"Registry Value\" as value, QIDNAME(qid) as event FROM events WHERE \"Registry Key\" ILIKE '%\\Run%' OR \"Registry Key\" ILIKE '%\\RunOnce%' ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": "SELECT Key, Value, Mtime\nFROM read_reg_key(glob='HKLM/SOFTWARE/Microsoft/Windows/CurrentVersion/Run/*')\nUNION ALL\nSELECT Key, Value, Mtime\nFROM read_reg_key(glob='HKCU/SOFTWARE/Microsoft/Windows/CurrentVersion/Run/*')\nORDER BY Mtime DESC",
+        "carbon_black": "regmod_name:\"\\CurrentVersion\\Run\"",
+        "sysmon": "<RegistryEvent onmatch=\"include\"><TargetObject condition=\"contains any\">\\Run\\;\\RunOnce\\;\\Policies\\Explorer\\Run</TargetObject></RegistryEvent>"
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Notify affected users and conduct awareness training",
+      "detail": "Notify all recipients of the phishing email that it was malicious. Provide guidance on what to look for and how to report. Trigger mandatory awareness training for users who clicked the link. Document which users were notified and when.",
+      "queries": {
+        "splunk": "index=email | search (sourcetype=proofpoint OR sourcetype=o365:management:activity) subject=\"[phishing_subject]\" | stats values(recipient) as all_recipients, count",
+        "kql": "EmailEvents\n| where Subject == '<phishing_subject>'\n| summarize Recipients=make_set(RecipientEmailAddress)\n| extend RecipientCount=array_length(Recipients)",
+        "qradar": "SELECT \"Recipient\", \"Sender\", \"Subject\" FROM events WHERE logsourcetypename(devicetype) ILIKE '%Email%' AND \"Subject\" = '<phishing_subject>' LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Update detection rules and block lists",
+      "detail": "Add the phishing domain, sender IP, URL patterns, and attachment hashes to email gateway block lists, EDR IOC feeds, DNS sinkholes, and web proxy deny lists. Create or tune SIEM detection rules to catch similar campaigns. Submit IOCs to threat intel sharing platforms (ISACs, MISP).",
+      "queries": {
+        "splunk": "index=network sourcetype=proxy cs_host=[phishing_domain] | timechart count span=1h",
+        "kql": "DnsEvents\n| where Name contains '<phishing_domain>'\n| summarize QueryCount=count(), Sources=make_set(ClientIP) by Name\n| order by QueryCount desc",
+        "qradar": "SELECT sourceip, \"DNS Query\" as query, count(*) as hits FROM events WHERE logsourcetypename(devicetype) ILIKE '%DNS%' AND \"DNS Query\" ILIKE '%<phishing_domain>%' GROUP BY sourceip, \"DNS Query\" ORDER BY hits DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "metrics": [
+    { "name": "Time to Retract", "target": "<30 minutes from initial detection" },
+    { "name": "Credential Reset SLA", "target": "<60 minutes if credential harvesting confirmed" },
+    { "name": "Endpoint Isolation SLA", "target": "<15 minutes if payload executed" },
+    { "name": "User Notification", "target": "<2 hours from confirmation" }
+  ]
+}

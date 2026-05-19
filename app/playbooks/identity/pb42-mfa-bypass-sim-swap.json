@@ -1,0 +1,175 @@
+{
+  "id": "pb42",
+  "num": 42,
+  "name": "MFA Bypass / SIM Swap Attack",
+  "fullName": "MFA Bypass / SIM Swap Attack",
+  "type": "Account Takeover – MFA Fatigue / SIM Swap",
+  "severity": "Critical",
+  "priority": "Critical (complete account takeover with valid session token)",
+  "detection": "IdP logs (Azure AD, Okta, Duo), SIEM, MFA provider alerts, User reports",
+  "scenario": "An account takeover is suspected via MFA fatigue (repeated push notification bombing resulting in accidental or frustrated approval), SIM swapping (phone number ported to attacker-controlled SIM), adversary-in-the-middle phishing kits (EvilGinx, Modlishka, Evilginx2), or TOTP interception. Indicators include excessive MFA denials followed by a single approval from an unusual location, impossible travel after MFA success, user reporting they cannot receive SMS codes, or session tokens with no MFA claim.",
+  "mitre": "T1621, T1566.001, T1111, T1078, T1539",
+  "tools": "IdP logs (Azure AD / Entra ID, Okta, Duo, Ping); SIEM (Splunk, Sentinel); MFA provider console; Telecom provider (for SIM swap confirmation); Conditional Access / Zero Trust policy",
+  "sev": "critical",
+  "cat": "Identity",
+  "source": "library",
+  "updated": "2026-05-17",
+  "related": ["pb03", "pb11", "pb38"],
+  "detSteps": [
+    {
+      "title": "Detect MFA fatigue — excessive push denials followed by approval",
+      "detail": "MFA fatigue (also called MFA bombing) involves the attacker repeatedly triggering MFA push requests to the victim's device, hoping the user approves one to stop the notifications. Key indicator: many MFA DENY events in a short window (e.g., 5+ denials within 10 minutes) followed by a single APPROVE from the same or similar IP, or the approval coming from a different IP/location than the denials. Also look for 'number matching not completed' events.",
+      "queries": {
+        "splunk": "index=o365 sourcetype=o365:management:activity OR index=azure sourcetype=azure:aad:audit | eval mfa_result=coalesce(Status.additionalDetails,ResultDescription) | stats count as total_attempts, count(eval(mfa_result=\"MFA denied\")) as denials, count(eval(mfa_result=\"MFA successfully completed\")) as approvals by UserId, ClientIP | where denials >= 5 AND approvals >= 1 | sort -denials",
+        "kql": "SigninLogs\n| where TimeGenerated > ago(1h)\n| where AuthenticationRequirement == 'multiFactorAuthentication'\n| summarize Denials=countif(ResultType != 0), Approvals=countif(ResultType == 0), Locations=make_set(tostring(LocationDetails.countryOrRegion)) by UserPrincipalName, bin(TimeGenerated, 10m)\n| where Denials >= 5 and Approvals >= 1\n| order by Denials desc",
+        "qradar": "SELECT username, sourceip, QIDNAME(qid) as event, COUNT(*) as count, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' OR logsourcetypename(devicetype) ILIKE '%Okta%' AND QIDNAME(qid) ILIKE '%MFA%' GROUP BY username, sourceip, event, starttime HAVING count > 5 ORDER BY count DESC LAST 1 HOURS",
+        "sigma": "title: MFA Fatigue — Excessive Push Denials Then Approval\nstatus: experimental\ndescription: Detects MFA bombing where repeated denials are followed by a successful MFA approval\nlogsource:\n  product: azure\n  service: signinlogs\ndetection:\n  selection_deny:\n    ResultType|contains: 'MFA denied'\n  selection_approve:\n    ResultType: 0\n    AuthenticationRequirement: 'multiFactorAuthentication'\n  condition: selection_deny and selection_approve\nfalsepositives:\n  - Users accidentally denying then approving their own MFA request\nlevel: high",
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Detect impossible travel — geographic anomalies post-MFA",
+      "detail": "After a successful MFA bypass, the attacker will authenticate from their own location which may be geographically impossible relative to the user's prior authentic sign-in. Calculate the distance and travel time between consecutive successful sign-ins. A sign-in from the UK followed 10 minutes later by a sign-in from Russia is physically impossible. Also check for new device fingerprints or new user agents immediately after MFA success.",
+      "queries": {
+        "splunk": "index=azure sourcetype=azure:aad:audit ResultType=0 | eval lat=json_extract(LocationDetails,\"$.geoCoordinates.latitude\"), lon=json_extract(LocationDetails,\"$.geoCoordinates.longitude\") | sort 0 _time | streamstats window=2 current=true latest(_time) as prev_time, latest(lat) as prev_lat, latest(lon) as prev_lon by UserPrincipalName | eval time_diff=abs(_time-prev_time)/3600 | table _time, UserPrincipalName, IPAddress, LocationDetails, prev_lat, prev_lon, time_diff",
+        "kql": "SigninLogs\n| where TimeGenerated > ago(24h)\n| where ResultType == 0\n| extend Country = tostring(LocationDetails.countryOrRegion)\n| summarize Countries=make_set(Country), SigninCount=count() by UserPrincipalName, bin(TimeGenerated, 1h)\n| where array_length(Countries) > 1\n| project TimeGenerated, UserPrincipalName, Countries, SigninCount\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, sourceip, \"Country\" as country, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND \"Result\" = 'Success' AND \"Authentication Method\" ILIKE '%MFA%' ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": "title: Impossible Travel After Successful Authentication\nstatus: experimental\ndescription: Detects user authenticating successfully from two geographically distant locations within a short time window\nlogsource:\n  product: azure\n  service: signinlogs\ndetection:\n  selection:\n    ResultType: 0\n  condition: selection\nfalsepositives:\n  - VPN usage\n  - Shared accounts\nlevel: medium",
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Detect AiTM / EvilGinx session token theft indicators",
+      "detail": "Adversary-in-the-Middle phishing kits (EvilGinx, Modlishka) relay the victim's credentials and capture session cookies in real time, bypassing MFA entirely. Indicators: session tokens with no MFA claim despite conditional access requiring MFA; sign-ins from a known phishing infrastructure IP; user agent strings inconsistent with the user's normal devices; CAE (Continuous Access Evaluation) revocation failures; or Entra ID 'unfamiliar sign-in properties' risk detections.",
+      "queries": {
+        "splunk": "index=azure sourcetype=azure:aad:audit ResultType=0 | eval mfa_claim=json_extract(AuthenticationDetails,\"$.mfaDetail\") | where isnull(mfa_claim) AND AuthenticationRequirement=\"multiFactorAuthentication\" | table _time, UserPrincipalName, IPAddress, AppDisplayName, DeviceDetail",
+        "kql": "SigninLogs\n| where TimeGenerated > ago(24h)\n| where ResultType == 0\n| where AuthenticationRequirement == 'multiFactorAuthentication'\n| where RiskLevelDuringSignIn in ('high','medium')\nor RiskEventTypes_V2 has_any ('unfamiliarFeatures','anonymizedIPAddress','maliciousIPAddress','impossibleTravel')\n| project TimeGenerated, UserPrincipalName, IPAddress, AppDisplayName, RiskLevelDuringSignIn, RiskEventTypes_V2\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, sourceip, \"App Name\" as app, \"Device ID\" as device, \"Risk Level\" as risk, magnitude FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND magnitude > 5 AND \"Result\" = 'Success' ORDER BY magnitude DESC LAST 24 HOURS",
+        "sigma": "title: Session Token Theft via AiTM Phishing Kit\nstatus: experimental\ndescription: Detects sign-in with session tokens that lack MFA claims despite MFA policy requirements — indicative of AiTM session hijacking\nlogsource:\n  product: azure\n  service: signinlogs\ndetection:\n  selection:\n    ResultType: 0\n    AuthenticationRequirement: 'multiFactorAuthentication'\n    RiskLevelDuringSignIn:\n      - 'high'\n      - 'medium'\n  condition: selection\nfalsepositives:\n  - Risky sign-ins from legitimate users in new locations\nlevel: high",
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Investigate SIM swap — user cannot receive SMS codes",
+      "detail": "SIM swapping involves the attacker convincing the telecom provider to port the victim's phone number to an attacker-controlled SIM. The victim loses SMS/voice MFA capability. Indicators: user reports they cannot receive calls or texts; sign-in logs show MFA method changed to app-based or email unexpectedly; account recovery flows triggered; or a new phone number registered to the account. Contact the telecom provider to confirm whether a SIM swap occurred.",
+      "queries": {
+        "splunk": "index=azure sourcetype=azure:aad:audit OperationName IN (\"Update user\",\"Update user StrongAuthenticationPhoneAppDetail\",\"User registered security info\") | table _time, InitiatedBy, Target, OperationName, ResultDescription",
+        "kql": "AuditLogs\n| where TimeGenerated > ago(24h)\n| where OperationName in ('Update user','User registered security info','User deleted security info','Update user StrongAuthenticationPhoneAppDetail')\n| extend Actor = tostring(InitiatedBy.user.userPrincipalName)\n| extend Target = tostring(TargetResources[0].userPrincipalName)\n| project TimeGenerated, OperationName, Actor, Target, CorrelationId\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, \"Operation Name\" as op, \"Target\" as target, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND (\"Operation Name\" ILIKE '%security info%' OR \"Operation Name\" ILIKE '%phone%' OR \"Operation Name\" ILIKE '%authenticator%') ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": "title: MFA Method Changed — Potential SIM Swap\nstatus: experimental\ndescription: Detects changes to user MFA phone number or authentication method which may indicate SIM swap or account takeover\nlogsource:\n  product: azure\n  service: auditlogs\ndetection:\n  selection:\n    OperationName|contains:\n      - 'security info'\n      - 'StrongAuthentication'\n      - 'phone'\n  condition: selection\nfalsepositives:\n  - Legitimate user updating their MFA device\nlevel: high",
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Revoke all active sessions and tokens immediately",
+      "detail": "Use the IdP admin console to revoke all active refresh tokens, access tokens, and session cookies for the compromised account. In Azure AD, use 'Revoke sign-in sessions' and run 'Revoke-AzureADUserAllRefreshToken'. In Okta, use 'Revoke Sessions'. This invalidates stolen session cookies immediately but may cause authentication disruption for the legitimate user.",
+      "queries": {
+        "splunk": "index=azure sourcetype=azure:aad:audit OperationName=\"Revoke user's tokens\" | table _time, InitiatedBy, Target, ResultDescription",
+        "kql": "AuditLogs\n| where TimeGenerated > ago(1h)\n| where OperationName == 'Revoke user tokens'\n| extend Actor = tostring(InitiatedBy.user.userPrincipalName)\n| extend Target = tostring(TargetResources[0].userPrincipalName)\n| project TimeGenerated, OperationName, Actor, Target\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, \"Operation Name\" as op, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND \"Operation Name\" ILIKE '%revoke%' ORDER BY starttime DESC LAST 1 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Block the attacker IP and apply conditional access policies",
+      "detail": "Block the attacker's source IP range at the firewall and in the IdP (Named Locations block list). Apply a Conditional Access policy requiring compliant device and re-authentication for the affected user. If SIM swap is confirmed, work with the telecom provider to lock the account and restore the user's number. Update the user's MFA to use Microsoft Authenticator with number matching (not SMS).",
+      "queries": {
+        "splunk": "index=azure sourcetype=azure:aad:audit IPAddress=[attacker_ip] | stats count by UserPrincipalName, OperationName | sort -count",
+        "kql": "SigninLogs\n| where IPAddress == '<attacker_ip>'\n| where TimeGenerated > ago(24h)\n| summarize Accounts=dcount(UserPrincipalName), Operations=make_set(AppDisplayName) by IPAddress\n| order by Accounts desc",
+        "qradar": "SELECT username, sourceip, QIDNAME(qid) as event, count(*) as hits FROM events WHERE sourceip = '<attacker_ip>' GROUP BY username, sourceip, event ORDER BY hits DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Force password reset and re-enrol MFA device",
+      "detail": "Force an immediate password reset for the compromised account through a verified out-of-band channel (not email if email is also compromised). Ensure the new password is not reused and meets complexity requirements. Re-enrol the user's MFA using a phishing-resistant method (FIDO2 hardware key, Microsoft Authenticator number matching). Do not re-enable SMS MFA if SIM swap was the attack vector.",
+      "queries": {
+        "splunk": "index=azure sourcetype=azure:aad:audit OperationName=\"Reset user password\" | table _time, InitiatedBy, Target, ResultDescription",
+        "kql": "AuditLogs\n| where TimeGenerated > ago(24h)\n| where OperationName == 'Reset user password'\n| extend Actor = tostring(InitiatedBy.user.userPrincipalName)\n| extend Target = tostring(TargetResources[0].userPrincipalName)\n| project TimeGenerated, OperationName, Actor, Target\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, \"Operation Name\" as op, \"Target\" as target FROM events WHERE \"Operation Name\" ILIKE '%password reset%' OR \"Operation Name\" ILIKE '%MFA enroll%' ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Audit all actions taken by the attacker during the session",
+      "detail": "Review all audit logs for the compromised account from the time of the illegitimate sign-in to the time of containment. Look for: emails read or exfiltrated, files accessed or downloaded, OAuth app consents granted, new inbox rules created, new accounts created, and privilege escalation attempts. Every action must be documented for the IR report and potential legal proceedings.",
+      "queries": {
+        "splunk": "index=o365 sourcetype=o365:management:activity UserId=[compromised_user] earliest=[attack_start] latest=[containment_time] | stats count by Operation, ClientIPAddress | sort -count",
+        "kql": "OfficeActivity\n| where UserId == '<compromised_user>'\n| where TimeGenerated between (datetime('<attack_start>') .. datetime('<containment_time>'))\n| summarize count() by Operation, ClientIP\n| order by count_ desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, sourceip, starttime FROM events WHERE username = '<compromised_user>' AND starttime BETWEEN '<attack_start>' AND '<containment_time>' ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Remediate any changes made by the attacker",
+      "detail": "Reverse all attacker-made changes: remove inbox forwarding rules, revoke OAuth app consents, delete newly created accounts, restore modified permissions and group memberships. If the attacker created additional backdoor accounts or OAuth apps for persistence, ensure these are all removed. Document each change reversal with timestamps.",
+      "queries": {
+        "splunk": "index=o365 sourcetype=o365:management:activity Operation IN (\"New-InboxRule\",\"Add-MailboxPermission\",\"Add member to role\",\"Consent to application\") UserId=[compromised_user] | table _time, Operation, Parameters | sort _time",
+        "kql": "AuditLogs\n| where TimeGenerated > ago(24h)\n| where InitiatedBy.user.userPrincipalName == '<compromised_user>'\n| where OperationName in ('Add member to role','Consent to application','New-InboxRule','Add app role assignment to service principal')\n| project TimeGenerated, OperationName, TargetResources\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, \"Additional Information\" as info FROM events WHERE username = '<compromised_user>' AND (QIDNAME(qid) ILIKE '%inbox rule%' OR QIDNAME(qid) ILIKE '%consent%' OR QIDNAME(qid) ILIKE '%role%') ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Upgrade all high-value accounts to phishing-resistant MFA",
+      "detail": "Transition all privileged accounts (global admins, security admins, privileged roles) to FIDO2 hardware keys or certificate-based authentication. Enable number matching and additional context in push notifications for all remaining authenticator app users. Disable SMS-based MFA organisation-wide if possible. Apply Conditional Access requiring compliant device for all sign-ins.",
+      "queries": {
+        "splunk": "index=azure sourcetype=azure:aad:audit OperationName=\"Update user\" | search \"AuthenticationMethod\" | table _time, Target, InitiatedBy, ResultDescription",
+        "kql": "AuditLogs\n| where TimeGenerated > ago(7d)\n| where OperationName == 'User registered security info'\n| extend Method = tostring(TargetResources[0].modifiedProperties[0].newValue)\n| summarize count() by Method\n| order by count_ desc",
+        "qradar": "SELECT username, \"Authentication Method\" as method, COUNT(*) as count FROM events WHERE QIDNAME(qid) ILIKE '%MFA%' GROUP BY username, method ORDER BY count DESC LAST 7 DAYS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Monitor the compromised account intensively for 30 days",
+      "detail": "Place the affected account on an elevated monitoring watchlist. Alert on any new sign-in from an unknown device, new country, or during unusual hours. Alert on any MFA method change. Mandate weekly check-ins with the affected user for 30 days. Conduct a post-incident review and provide the user with awareness training on MFA fatigue and phishing.",
+      "queries": {
+        "splunk": "index=azure sourcetype=azure:aad:audit UserPrincipalName=[affected_user] | timechart count span=1h by OperationName",
+        "kql": "SigninLogs\n| where UserPrincipalName == '<affected_user>'\n| where TimeGenerated > ago(30d)\n| where RiskLevelDuringSignIn != 'none'\n| project TimeGenerated, IPAddress, AppDisplayName, RiskLevelDuringSignIn, ResultType\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, sourceip, QIDNAME(qid) as event, magnitude, starttime FROM events WHERE username = '<affected_user>' ORDER BY starttime DESC LAST 30 DAYS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "metrics": [
+    { "name": "Session Revocation SLA", "target": "<5 minutes from confirmation" },
+    { "name": "Password Reset SLA", "target": "<15 minutes via out-of-band channel" },
+    { "name": "Attacker Action Audit", "target": "Complete within 2 hours of containment" },
+    { "name": "Phishing-Resistant MFA Deployment", "target": "All privileged accounts within 48 hours" }
+  ]
+}

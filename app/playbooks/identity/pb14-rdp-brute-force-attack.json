@@ -19,8 +19,8 @@
       "detail": "RDP brute force produces high volumes of failed authentication against the same destination IP on port 3389. Look for Event ID 4625 (failed login) with many distinct usernames or the same username repeated. Password spraying shows one attempt per account across many accounts.",
       "queries": {
         "splunk": "index=network sourcetype=wineventlog EventCode=4625 dest_port=3389 | stats count dc(user) as users by src_ip | where count > 50 | sort -count",
-        "kql": null,
-        "qradar": null,
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(1h)\n| where EventID == 4625\n| where LogonType == 10\n| summarize FailCount=count(), UniqueUsers=dcount(TargetUserName) by IpAddress\n| where FailCount > 50\n| order by FailCount desc",
+        "qradar": "SELECT sourceip, COUNT(*) as failures, COUNT(DISTINCT username) as users FROM events WHERE logsourcetypename(devicetype) ILIKE '%Windows%' AND qid IN (SELECT qid FROM qidmap WHERE eventid = '4625') GROUP BY sourceip HAVING failures > 50 ORDER BY failures DESC LAST 1 HOURS",
         "sigma": null,
         "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
         "carbon_black": null,
@@ -32,8 +32,8 @@
       "detail": "A successful login (Event ID 4624) from the same attacker IP shortly after a failure spike indicates the brute force succeeded. This is the critical escalation point — treat the destination host as fully compromised.",
       "queries": {
         "splunk": "index=network sourcetype=wineventlog EventCode IN (4624,4625) src_ip=[attacker_ip] | stats count(eval(EventCode=4624)) as success count(eval(EventCode=4625)) as fail by user | where success > 0",
-        "kql": null,
-        "qradar": null,
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(1h)\n| where IpAddress == '<attacker_ip>'\n| where EventID in (4624, 4625)\n| summarize Success=countif(EventID==4624), Failures=countif(EventID==4625) by TargetUserName, IpAddress\n| where Success > 0",
+        "qradar": "SELECT sourceip, username, SUM(CASE WHEN qid IN (SELECT qid FROM qidmap WHERE eventid='4624') THEN 1 ELSE 0 END) as success, SUM(CASE WHEN qid IN (SELECT qid FROM qidmap WHERE eventid='4625') THEN 1 ELSE 0 END) as failures FROM events WHERE sourceip = '<attacker_ip>' AND logsourcetypename(devicetype) ILIKE '%Windows%' GROUP BY sourceip, username LAST 1 HOURS",
         "sigma": null,
         "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
         "carbon_black": null,
@@ -45,8 +45,8 @@
       "detail": "Check the attacker's IP geolocation and ASN. Most RDP brute force comes from known VPS providers (DigitalOcean, Linode, OVH), compromised residential IPs, or TOR exit nodes. Geolocation helps build blocking rules and assess whether other assets are targeted.",
       "queries": {
         "splunk": "index=network sourcetype=wineventlog EventCode=4625 dest_port=3389 | stats count by src_ip | sort -count | head 20",
-        "kql": null,
-        "qradar": null,
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(1h)\n| where EventID == 4625\n| where LogonType == 10\n| summarize Failures=count() by IpAddress\n| order by Failures desc\n| take 20",
+        "qradar": "SELECT sourceip, COUNT(*) as failures FROM events WHERE logsourcetypename(devicetype) ILIKE '%Windows%' AND qid IN (SELECT qid FROM qidmap WHERE eventid = '4625') GROUP BY sourceip ORDER BY failures DESC LAST 1 HOURS",
         "sigma": null,
         "velociraptor": "SELECT EventID, TimeCreated, Computer, Channel, Message FROM Artifact.Windows.EventLogs.SecurityEventLogParser() ORDER BY TimeCreated DESC LIMIT 200",
         "carbon_black": null,
@@ -60,8 +60,8 @@
       "detail": "Apply deny rules at the perimeter for the attacker's source IPs. If RDP is exposed directly to the internet, immediately restrict access to approved IP ranges or require VPN. Temporarily disable RDP on high-risk systems that were targeted until secured.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DeviceNetworkEvents\n| where TimeGenerated > ago(1h)\n| where RemotePort == 3389\n| where RemoteIP in (<attacker_ips>)\n| summarize Connections=count() by RemoteIP, DeviceName\n| order by Connections desc",
+        "qradar": "SELECT sourceip, destinationip, COUNT(*) as conn FROM events WHERE destinationport = 3389 AND sourceip IN (<attacker_ips>) AND logsourcetypename(devicetype) ILIKE '%Firewall%' GROUP BY sourceip, destinationip ORDER BY conn DESC LAST 1 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -73,8 +73,8 @@
       "detail": "Force a password reset on all accounts targeted — especially if any succeeded. Enforce account lockout policy (maximum 5 failed attempts, 30-minute lockout). Notify users if their account was targeted.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(24h)\n| where EventID in (4624, 4625)\n| where LogonType == 10\n| project TimeGenerated, TargetUserName, IpAddress, EventID, WorkstationName\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, sourceip, QIDNAME(qid) as event, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Windows%' AND qid IN (SELECT qid FROM qidmap WHERE eventid IN ('4624','4625')) ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -88,8 +88,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(24h)\n| where EventID == 4624\n| where LogonType == 10\n| where IpAddress in (<attacker_ips>)\n| project TimeGenerated, TargetUserName, IpAddress, WorkstationName\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, sourceip, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Windows%' AND qid IN (SELECT qid FROM qidmap WHERE eventid = '4624') AND sourceip IN (<attacker_ips>) ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -101,8 +101,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DeviceNetworkEvents\n| where TimeGenerated > ago(24h)\n| where RemotePort == 3389\n| summarize Connections=count() by DeviceName, RemoteIP\n| order by Connections desc",
+        "qradar": "SELECT destinationip, sourceip, COUNT(*) as conn FROM events WHERE destinationport = 3389 AND logsourcetypename(devicetype) ILIKE '%Firewall%' GROUP BY destinationip, sourceip ORDER BY conn DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -114,8 +114,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DeviceRegistryEvents\n| where TimeGenerated > ago(24h)\n| where RegistryKey has_any ('Run','RunOnce','Policies\\\\Explorer\\\\Run')\n| project TimeGenerated, DeviceName, RegistryKey, RegistryValueName, RegistryValueData\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, \"Registry Key\" as regkey, QIDNAME(qid) as event, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Sysmon%' AND QIDNAME(qid) ILIKE '%Registry%' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -127,8 +127,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DeviceNetworkEvents\n| where TimeGenerated > ago(24h)\n| where RemotePort in (445, 3389, 139)\n| summarize Targets=dcount(RemoteIP) by DeviceName\n| where Targets > 5\n| order by Targets desc",
+        "qradar": "SELECT sourceip, destinationip, destinationport, COUNT(*) as conn FROM events WHERE destinationport IN (445, 3389, 139) AND logsourcetypename(devicetype) ILIKE '%Firewall%' GROUP BY sourceip, destinationip, destinationport ORDER BY conn DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -140,8 +140,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DeviceNetworkEvents\n| where TimeGenerated > ago(48h)\n| where RemotePort in (445, 3389, 139)\n| where DeviceName =~ '<affected_host>'\n| summarize Targets=dcount(RemoteIP) by RemotePort, InitiatingProcessFileName\n| order by Targets desc",
+        "qradar": "SELECT sourceip, destinationip, destinationport, COUNT(*) as conn FROM events WHERE sourceip = '<affected_ip>' AND destinationport IN (445, 3389, 139) GROUP BY sourceip, destinationip, destinationport ORDER BY conn DESC LAST 48 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -181,8 +181,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(7d)\n| where EventID in (4624, 4625)\n| where LogonType == 10\n| summarize count() by IpAddress, TargetUserName, bin(TimeGenerated, 1h)\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, username, COUNT(*) as attempts FROM events WHERE logsourcetypename(devicetype) ILIKE '%Windows%' AND qid IN (SELECT qid FROM qidmap WHERE eventid IN ('4624','4625')) GROUP BY sourceip, username ORDER BY attempts DESC LAST 7 DAYS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -226,4 +226,3 @@
     }
   ]
 }
-

@@ -19,8 +19,8 @@
       "detail": "DNS tunnelling encodes data as base32/base64 in subdomain labels — these appear as long, alphanumeric, semantically meaningless strings. Look for query lengths over 50 characters, high query volume to a single domain, and abuse of TXT or NULL record types.",
       "queries": {
         "splunk": "index=network sourcetype=dns | stats count avg(len(query)) as avg_qlen values(record_type) as rtypes by src_ip, query | where avg_qlen > 50 OR count > 300 | sort -count",
-        "kql": null,
-        "qradar": null,
+        "kql": "DnsEvents\n| where TimeGenerated > ago(1h)\n| where Name has '.'\n| extend QueryLen = strlen(Name)\n| where QueryLen > 50\n| summarize QueryCount=count(), AvgLen=avg(QueryLen) by ClientIP, Name\n| where QueryCount > 10\n| order by QueryCount desc",
+        "qradar": "SELECT sourceip, \"DNS Query\" as query, LENGTH(\"DNS Query\") as qlen, COUNT(*) as requests FROM events WHERE logsourcetypename(devicetype) ILIKE '%DNS%' AND LENGTH(\"DNS Query\") > 50 GROUP BY sourceip, query HAVING requests > 10 ORDER BY requests DESC LAST 1 HOURS",
         "sigma": null,
         "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport = 53 AND Name =~ '(?i)(powershell|cmd|nslookup|python|perl)' ORDER BY Ctime DESC LIMIT 200",
         "carbon_black": "netconn_count:[20 TO *] AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:nslookup.exe)",
@@ -32,8 +32,8 @@
       "detail": "Legitimate traffic has readable subdomain labels. Tunnel tools produce fixed-length, alphanumeric-only labels that repeat at regular intervals (beaconing). The regularity of query timing is itself an indicator.",
       "queries": {
         "splunk": "index=network sourcetype=dns | rex field=query \"^(?<sub>[^.]+)\\\\.\" | eval sub_len=len(sub) | stats count avg(sub_len) as avg_len by query | where avg_len > 30 | sort -avg_len",
-        "kql": null,
-        "qradar": null,
+        "kql": "DnsEvents\n| where TimeGenerated > ago(1h)\n| where Name has '.'\n| extend SubLabel = extract('^([^.]+)\\\\.', 1, Name)\n| extend SubLen = strlen(SubLabel)\n| where SubLen > 30\n| summarize QueryCount=count(), AvgSubLen=avg(SubLen) by ClientIP, Name\n| order by AvgSubLen desc",
+        "qradar": "SELECT sourceip, \"DNS Query\" as query, COUNT(*) as requests FROM events WHERE logsourcetypename(devicetype) ILIKE '%DNS%' GROUP BY sourceip, query HAVING COUNT(*) > 20 ORDER BY requests DESC LAST 1 HOURS",
         "sigma": null,
         "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport = 53 AND Name =~ '(?i)(powershell|cmd|nslookup|python|perl)' ORDER BY Ctime DESC LIMIT 200",
         "carbon_black": "netconn_count:[20 TO *] AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:nslookup.exe)",
@@ -45,8 +45,8 @@
       "detail": "After DNS resolution, tunnelling tools often fall back to direct TCP/UDP connections to the same destination on non-standard ports. Look for connections from the same host to the resolved IP on unusual ports shortly after the DNS queries.",
       "queries": {
         "splunk": "index=network (sourcetype=firewall OR sourcetype=netflow) src_ip=[suspect_ip] | stats count by dest_ip, dest_port | where dest_port NOT IN (80,443,53,22) | sort -count",
-        "kql": null,
-        "qradar": null,
+        "kql": "DeviceNetworkEvents\n| where TimeGenerated > ago(1h)\n| where DeviceName =~ '<suspect_host>'\n| where RemotePort !in (80, 443, 53, 22)\n| summarize Connections=count() by RemoteIP, RemotePort\n| order by Connections desc",
+        "qradar": "SELECT sourceip, destinationip, destinationport, COUNT(*) as conn FROM events WHERE sourceip = '<suspect_ip>' AND destinationport NOT IN (80, 443, 53, 22) AND logsourcetypename(devicetype) ILIKE '%Firewall%' GROUP BY sourceip, destinationip, destinationport ORDER BY conn DESC LAST 1 HOURS",
         "sigma": null,
         "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport = 53 AND Name =~ '(?i)(powershell|cmd|nslookup|python|perl)' ORDER BY Ctime DESC LIMIT 200",
         "carbon_black": "netconn_count:[20 TO *] AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:nslookup.exe)",
@@ -58,8 +58,8 @@
       "detail": "Find all internal hosts that have queried the suspect tunnelling domain. Any host that received a successful response is a potential infection candidate.",
       "queries": {
         "splunk": "index=network sourcetype=dns query=\"*[suspect_domain]*\" | stats dc(src_ip) as hosts values(src_ip) as host_list",
-        "kql": null,
-        "qradar": null,
+        "kql": "DnsEvents\n| where TimeGenerated > ago(24h)\n| where Name contains '<suspect_domain>'\n| summarize Queries=count() by ClientIP\n| order by Queries desc",
+        "qradar": "SELECT sourceip, COUNT(*) as queries FROM events WHERE logsourcetypename(devicetype) ILIKE '%DNS%' AND \"DNS Query\" ILIKE '%<suspect_domain>%' GROUP BY sourceip ORDER BY queries DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport = 53 AND Name =~ '(?i)(powershell|cmd|nslookup|python|perl)' ORDER BY Ctime DESC LIMIT 200",
         "carbon_black": "netconn_count:[20 TO *] AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:nslookup.exe)",
@@ -73,8 +73,8 @@
       "detail": "Add the tunnelling domain to your DNS blocklist (return NXDOMAIN) and apply an outbound firewall rule blocking all traffic to the resolved IPs. Verify the block is in place and monitor for the same host attempting to use alternative C2 domains.",
       "queries": {
         "splunk": "index=network sourcetype=dns query=\"*[suspect_domain]*\" earliest=-15m | stats count by src_ip",
-        "kql": null,
-        "qradar": null,
+        "kql": "DnsEvents\n| where TimeGenerated > ago(15m)\n| where Name contains '<suspect_domain>'\n| summarize Queries=count() by ClientIP, Name\n| order by Queries desc",
+        "qradar": "SELECT sourceip, \"DNS Query\" as query, COUNT(*) as requests FROM events WHERE logsourcetypename(devicetype) ILIKE '%DNS%' AND \"DNS Query\" ILIKE '%<suspect_domain>%' GROUP BY sourceip, query ORDER BY requests DESC LAST 15 MINUTES",
         "sigma": null,
         "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name, Ctime FROM netstat() WHERE Rport = 53 AND Name =~ '(?i)(powershell|cmd|nslookup|python|perl)' ORDER BY Ctime DESC LIMIT 200",
         "carbon_black": "netconn_count:[20 TO *] AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:nslookup.exe)",
@@ -86,8 +86,8 @@
       "detail": "Network-isolate the host generating the tunnel traffic. If host access is limited, apply firewall rules to block all non-essential outbound traffic from that IP while the investigation continues.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DeviceNetworkEvents\n| where TimeGenerated > ago(1h)\n| where DeviceName =~ '<suspect_host>'\n| summarize Connections=count() by RemoteIP, RemotePort\n| order by Connections desc",
+        "qradar": "SELECT sourceip, destinationip, destinationport, COUNT(*) as conn FROM events WHERE sourceip = '<suspect_ip>' AND logsourcetypename(devicetype) ILIKE '%Firewall%' GROUP BY sourceip, destinationip, destinationport ORDER BY conn DESC LAST 1 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -101,8 +101,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DeviceProcessEvents\n| where TimeGenerated > ago(24h)\n| where DeviceName =~ '<affected_host>'\n| where FileName in ('dnscat2.exe','iodine.exe','ncat.exe','dns2tcp.exe','powerdns.exe')\n| project TimeGenerated, DeviceName, FileName, ProcessCommandLine, SHA256\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, \"Process Name\" as process, \"Command Line\" as cmdline, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Sysmon%' AND QIDNAME(qid) ILIKE '%ProcessCreate%' AND \"Process Name\" ILIKE '%dns%' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -127,8 +127,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DeviceRegistryEvents\n| where TimeGenerated > ago(24h)\n| where DeviceName =~ '<affected_host>'\n| where RegistryKey has_any ('Run','RunOnce','Policies\\\\Explorer\\\\Run')\n| project TimeGenerated, DeviceName, RegistryKey, RegistryValueName, RegistryValueData\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, \"Registry Key\" as regkey, QIDNAME(qid) as event, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Sysmon%' AND QIDNAME(qid) ILIKE '%Registry%' AND sourceip = '<affected_ip>' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -140,8 +140,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DnsEvents\n| where TimeGenerated > ago(24h)\n| where ClientIP =~ '<affected_ip>'\n| where SubType == 'LookupQuery'\n| summarize Queries=count() by QueryType, Name\n| order by Queries desc",
+        "qradar": "SELECT sourceip, \"DNS Query\" as query, \"Record Type\" as type, COUNT(*) as requests FROM events WHERE logsourcetypename(devicetype) ILIKE '%DNS%' AND sourceip = '<affected_ip>' GROUP BY sourceip, query, type ORDER BY requests DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -168,8 +168,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DnsEvents\n| where TimeGenerated > ago(1h)\n| summarize QueryCount=count() by ClientIP, QueryType\n| order by QueryCount desc",
+        "qradar": "SELECT sourceip, \"Record Type\" as type, COUNT(*) as queries FROM events WHERE logsourcetypename(devicetype) ILIKE '%DNS%' GROUP BY sourceip, type ORDER BY queries DESC LAST 1 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -181,8 +181,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DeviceNetworkEvents\n| where TimeGenerated > ago(72h)\n| where DeviceName in (<affected_hosts>)\n| where RemotePort == 53\n| summarize DNSQueries=count() by DeviceName, RemoteIP, bin(TimeGenerated, 1h)\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, destinationip, COUNT(*) as queries FROM events WHERE destinationport = 53 AND sourceip IN (<affected_hosts>) AND logsourcetypename(devicetype) ILIKE '%DNS%' GROUP BY sourceip, destinationip ORDER BY queries DESC LAST 3 DAYS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -194,8 +194,8 @@
       "detail": "",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "DnsEvents\n| where TimeGenerated > ago(24h)\n| where strlen(Name) > 50\n| summarize QueryCount=count() by ClientIP, bin(TimeGenerated, 1h)\n| where QueryCount > 50\n| order by TimeGenerated desc",
+        "qradar": "SELECT sourceip, COUNT(*) as long_queries FROM events WHERE logsourcetypename(devicetype) ILIKE '%DNS%' AND LENGTH(\"DNS Query\") > 50 GROUP BY sourceip ORDER BY long_queries DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -226,4 +226,3 @@
     }
   ]
 }
-

@@ -32,8 +32,8 @@
       "detail": "Verify the sending domain, IP reputation, Reply-To address, and DKIM/DMARC/SPF results. Spoofed BEC emails often have a legitimate-looking From address but a different Reply-To, or originate from a domain with missing or failing authentication records.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "EmailEvents\n| where TimeGenerated > ago(24h)\n| where SenderFromAddress =~ '<suspect_address>'\n| project TimeGenerated, SenderFromAddress, RecipientEmailAddress, Subject, SenderIPv4, AuthenticationDetails\n| order by TimeGenerated desc",
+        "qradar": "SELECT \"Sender\" as sender, \"Recipient\" as recipient, \"Subject\" as subject, sourceip, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Office 365%' AND QIDNAME(qid) ILIKE '%email%' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -45,8 +45,8 @@
       "detail": "Attackers immediately set up auto-forwarding to an external address after gaining access, allowing persistent email monitoring even after the password is reset. Also check for mailbox delegation granting another account send-as rights.",
       "queries": {
         "splunk": "index=cloud sourcetype=o365 Operation=New-InboxRule | table _time, user, ClientIPAddress, Parameters | sort _time",
-        "kql": null,
-        "qradar": null,
+        "kql": "OfficeActivity\n| where TimeGenerated > ago(24h)\n| where Operation in ('New-InboxRule','Set-InboxRule','Set-Mailbox')\n| where Parameters has_any ('ForwardTo','RedirectTo','ForwardingSmtpAddress')\n| project TimeGenerated, UserId, ClientIPAddress, Operation, Parameters\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, \"Parameters\" as params, ClientIPAddress, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Office 365%' AND QIDNAME(qid) ILIKE '%InboxRule%' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
         "carbon_black": null,
@@ -58,8 +58,8 @@
       "detail": "BEC's primary goal is financial fraud or credential harvesting. Determine if the compromised account sent emails requesting wire transfers, invoice changes, W-2/payroll data, or credential resets to finance, HR, or vendor contacts.",
       "queries": {
         "splunk": "index=email src_user=[compromised_user] dest_user IN ([finance_team],[hr_team]) | table _time, subject, attachment | sort _time",
-        "kql": null,
-        "qradar": null,
+        "kql": "EmailEvents\n| where TimeGenerated > ago(24h)\n| where SenderFromAddress =~ '<compromised_user>'\n| where RecipientEmailAddress has_any ('finance','payroll','accounts','hr','vendor')\n| project TimeGenerated, SenderFromAddress, RecipientEmailAddress, Subject\n| order by TimeGenerated desc",
+        "qradar": "SELECT \"Sender\" as sender, \"Recipient\" as recipient, \"Subject\" as subject, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Office 365%' AND \"Sender\" = '<compromised_user>' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
         "carbon_black": null,
@@ -73,8 +73,8 @@
       "detail": "Force a password reset through an admin-initiated flow. Revoke all active sessions, tokens, and refresh tokens for the account. If attacker controls the recovery email, change that too. Notify the user via an out-of-band channel (phone).",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "SigninLogs\n| where TimeGenerated > ago(24h)\n| where UserPrincipalName =~ '<compromised_user>'\n| project TimeGenerated, UserPrincipalName, IPAddress, AppDisplayName, ResultType, LocationDetails\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, sourceip, QIDNAME(qid) as event, starttime FROM events WHERE username = '<compromised_user>' AND logsourcetypename(devicetype) ILIKE '%Azure AD%' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -86,8 +86,8 @@
       "detail": "Delete any auto-forwarding rules, deletion filters, or read-and-mark rules created by the attacker. In M365 use: Get-InboxRule -Mailbox [user] | Remove-InboxRule. In Google Workspace: check Filters and Forwarding settings in admin console.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "OfficeActivity\n| where TimeGenerated > ago(24h)\n| where Operation in ('New-InboxRule','Remove-InboxRule','Set-InboxRule')\n| where UserId =~ '<compromised_user>'\n| project TimeGenerated, UserId, Operation, Parameters, ClientIPAddress\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, \"Parameters\" as params, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Office 365%' AND QIDNAME(qid) ILIKE '%InboxRule%' AND username = '<compromised_user>' ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -99,8 +99,8 @@
       "detail": "If a fraudulent wire transfer or invoice change request was sent, immediately notify finance to freeze or recall the transaction. Time is critical — contact the destination bank within hours for any chance of recovery.",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "EmailEvents\n| where TimeGenerated > ago(48h)\n| where SenderFromAddress =~ '<compromised_user>'\n| where Subject has_any ('wire','transfer','invoice','payment','urgent')\n| project TimeGenerated, SenderFromAddress, RecipientEmailAddress, Subject\n| order by TimeGenerated desc",
+        "qradar": "SELECT \"Sender\" as sender, \"Recipient\" as recipient, \"Subject\" as subject, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Office 365%' AND \"Sender\" = '<compromised_user>' AND LOWER(\"Subject\") LIKE '%wire%' OR LOWER(\"Subject\") LIKE '%invoice%' ORDER BY starttime DESC LAST 48 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -114,8 +114,8 @@
       "detail": "Review the full sent folder, deleted items, calendar, and contacts for the attack window. Document all emails sent, received, and deleted by the attacker. Check for any data exfiltrated through email attachments.",
       "queries": {
         "splunk": "index=cloud sourcetype=o365 user=[compromised_user] | stats count by Operation | sort -count",
-        "kql": null,
-        "qradar": null,
+        "kql": "OfficeActivity\n| where TimeGenerated > ago(7d)\n| where UserId =~ '<compromised_user>'\n| summarize count() by Operation\n| order by count_ desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, COUNT(*) as occurrences FROM events WHERE username = '<compromised_user>' AND logsourcetypename(devicetype) ILIKE '%Office 365%' GROUP BY username, event ORDER BY occurrences DESC LAST 7 DAYS",
         "sigma": null,
         "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
         "carbon_black": null,
@@ -127,8 +127,8 @@
       "detail": "If MFA was not enabled, enforce it immediately. If MFA was bypassed (via phishing for the OTP or SIM-swap), investigate the bypass method and apply stronger controls (hardware key, number matching, phishing-resistant FIDO2).",
       "queries": {
         "splunk": null,
-        "kql": null,
-        "qradar": null,
+        "kql": "AuditLogs\n| where TimeGenerated > ago(24h)\n| where OperationName in ('User registered security info','MFA method enrolled')\n| project TimeGenerated, OperationName, InitiatedBy, TargetResources\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, starttime FROM events WHERE logsourcetypename(devicetype) ILIKE '%Azure AD%' AND (QIDNAME(qid) ILIKE '%MFA%' OR QIDNAME(qid) ILIKE '%security info%') ORDER BY starttime DESC LAST 24 HOURS",
         "sigma": null,
         "velociraptor": null,
         "carbon_black": null,
@@ -142,8 +142,8 @@
       "detail": "Set alerts for any new inbox rules, unusual login locations, bulk email activity, or new OAuth grants for 30 days post-incident. Treat any anomaly as a priority re-investigation.",
       "queries": {
         "splunk": "index=cloud user=[recovered_user] | timechart count span=1d by Operation",
-        "kql": null,
-        "qradar": null,
+        "kql": "OfficeActivity\n| where TimeGenerated > ago(30d)\n| where UserId =~ '<recovered_user>'\n| where Operation in ('New-InboxRule','Set-InboxRule','Add-MailboxPermission','SendAs')\n| project TimeGenerated, UserId, Operation, ClientIPAddress, Parameters\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, QIDNAME(qid) as event, COUNT(*) as occurrences, starttime FROM events WHERE username = '<recovered_user>' AND logsourcetypename(devicetype) ILIKE '%Office 365%' GROUP BY username, event, starttime ORDER BY occurrences DESC LAST 30 DAYS",
         "sigma": null,
         "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
         "carbon_black": null,
@@ -178,4 +178,3 @@
     }
   ]
 }
-

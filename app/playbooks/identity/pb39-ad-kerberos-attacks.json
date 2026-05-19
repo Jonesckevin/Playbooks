@@ -1,0 +1,175 @@
+{
+  "id": "pb39",
+  "num": 39,
+  "name": "Active Directory / Kerberos Attacks",
+  "fullName": "Active Directory / Kerberos Attacks",
+  "type": "Credential Access – Kerberos / AD Abuse",
+  "severity": "Critical",
+  "priority": "Critical (domain-wide credential compromise risk)",
+  "detection": "Windows Security Event logs (SIEM), AD audit logs, EDR, Honey accounts",
+  "scenario": "Suspicious Kerberos activity is detected indicating potential Kerberoasting, AS-REP Roasting, Pass-the-Ticket, Golden Ticket, or DCSync attack. Indicators include excessive TGS requests for service accounts (Event 4769 with RC4 encryption), pre-authentication failures (4768 error 0x18), logons using forged tickets, or non-DC machines requesting AD replication (Event 4662).",
+  "mitre": "T1558.003, T1558.001, T1550.003, T1078, T1207",
+  "tools": "SIEM (Splunk, Sentinel); Windows Security Event logs; AD audit logs; EDR (CrowdStrike, Defender); BloodHound/SharpHound (for AD path analysis); Velociraptor",
+  "sev": "critical",
+  "cat": "Identity",
+  "source": "library",
+  "updated": "2026-05-17",
+  "related": ["pb09", "pb14", "pb20"],
+  "detSteps": [
+    {
+      "title": "Detect Kerberoasting — excessive TGS-REQ with RC4 encryption",
+      "detail": "Kerberoasting requests Kerberos service tickets for accounts with SPNs using RC4 (0x17) encryption rather than AES, so the ticket can be cracked offline. Look for Event ID 4769 (Kerberos Service Ticket Operations) with Ticket Encryption Type 0x17 (RC4-HMAC) from a single account in a short window, targeting multiple service accounts. Normal environments use AES (0x12 or 0x11).",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4769 Ticket_Encryption_Type=0x17 NOT ServiceName=\"krbtgt\" NOT ServiceName=*$ | stats count as tgs_requests dc(ServiceName) as unique_spns by Account_Name, Client_Address | where tgs_requests > 5 | sort -tgs_requests",
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(1h)\n| where EventID == 4769\n| where TicketEncryptionType == '0x17'\n| where ServiceName !endswith '$' and ServiceName != 'krbtgt'\n| summarize TGSCount=count(), UniqueSPNs=dcount(ServiceName), SPNList=make_set(ServiceName) by Account, IpAddress\n| where TGSCount > 5\n| order by TGSCount desc",
+        "qradar": "SELECT username as account, sourceip, COUNT(*) as tgs_count, COUNT(DISTINCT \"Service Name\") as unique_spns FROM events WHERE logsourcetypename(devicetype) = 'Microsoft Windows Security Event Log' AND \"Event ID\" = '4769' AND \"Ticket Encryption Type\" = '0x17' AND \"Service Name\" NOT ILIKE '%$' GROUP BY username, sourceip HAVING tgs_count > 5 ORDER BY tgs_count DESC LAST 1 HOURS",
+        "sigma": "title: Kerberoasting via RC4 Downgrade\nstatus: stable\ndescription: Detects Kerberoasting — multiple TGS requests with RC4 encryption targeting service accounts\nlogsource:\n  product: windows\n  service: security\ndetection:\n  selection:\n    EventID: 4769\n    TicketEncryptionType: '0x17'\n  filter_machine_accounts:\n    ServiceName|endswith: '$'\n  filter_krbtgt:\n    ServiceName: 'krbtgt'\n  condition: selection and not filter_machine_accounts and not filter_krbtgt\nfalsepositives:\n  - Legacy systems that only support RC4\nlevel: high",
+        "velociraptor": "SELECT EventID, TimeGenerated, Computer, AccountName, ServiceName, TicketEncryptionType, ClientAddress\nFROM wmi(query=\"SELECT * FROM Win32_NTLogEvent WHERE Logfile='Security' AND EventCode=4769\")\nWHERE TicketEncryptionType = '0x17'\nAND NOT ServiceName =~ '.*\\\\$'\nAND ServiceName != 'krbtgt'\nORDER BY TimeGenerated DESC\nLIMIT 200",
+        "carbon_black": "(process_name:Rubeus.exe OR process_name:GetUserSPNs.exe OR cmdline:\"kerberoast\") OR (process_name:powershell.exe AND cmdline:\"Get-DomainSPNTicket\")",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">kerberoast;Get-DomainSPNTicket;Invoke-Kerberoast;GetUserSPNs</CommandLine></ProcessCreate>"
+      }
+    },
+    {
+      "title": "Detect AS-REP Roasting — pre-authentication disabled accounts",
+      "detail": "AS-REP Roasting targets accounts where Kerberos pre-authentication is disabled (DONT_REQ_PREAUTH flag set). The attacker requests a TGT for such an account without knowing the password and receives an encrypted TGT that can be cracked offline. Look for Event 4768 with error code 0x0 (success) for accounts that do not normally receive TGT requests, or multiple 4768 requests to the same user from unusual client addresses.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4768 Pre_Authentication_Type=0 | stats count by TargetUserName, Client_Address | where count > 1 | sort -count",
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(1h)\n| where EventID == 4768\n| where PreAuthType == '0'\n| summarize RequestCount=count() by TargetUserName, IpAddress\n| where RequestCount > 1\n| order by RequestCount desc",
+        "qradar": "SELECT \"Target Username\" as target, sourceip, COUNT(*) as req_count FROM events WHERE logsourcetypename(devicetype) = 'Microsoft Windows Security Event Log' AND \"Event ID\" = '4768' AND \"Pre-Authentication Type\" = '0' GROUP BY \"Target Username\", sourceip HAVING req_count > 1 ORDER BY req_count DESC LAST 1 HOURS",
+        "sigma": "title: AS-REP Roasting — Pre-Authentication Disabled\nstatus: stable\ndescription: Detects AS-REP requests against accounts with Kerberos pre-authentication disabled\nlogsource:\n  product: windows\n  service: security\ndetection:\n  selection:\n    EventID: 4768\n    PreAuthType: '0'\n  condition: selection\nfalsepositives:\n  - Service accounts explicitly configured without pre-auth\nlevel: high",
+        "velociraptor": "SELECT EventID, TimeGenerated, Computer, TargetUserName, PreAuthType, ClientAddress\nFROM wmi(query=\"SELECT * FROM Win32_NTLogEvent WHERE Logfile='Security' AND EventCode=4768\")\nWHERE PreAuthType = '0'\nORDER BY TimeGenerated DESC\nLIMIT 200",
+        "carbon_black": "(process_name:Rubeus.exe AND cmdline:\"asreproast\") OR (process_name:powershell.exe AND cmdline:\"Get-ASREPHash\")",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">asreproast;Get-ASREPHash;Invoke-ASREPRoasting</CommandLine></ProcessCreate>"
+      }
+    },
+    {
+      "title": "Detect Golden / Silver Ticket and Pass-the-Ticket",
+      "detail": "Golden and Silver tickets are forged Kerberos tickets that allow attackers to authenticate as any user (Golden) or to specific services (Silver) without valid credentials. Indicators: Event 4769 with ticket lifetime > 10 hours (Golden Ticket default is 10y), logons using tickets from accounts that never had an interactive session, or Event 4624 (LogonType 3 or 9) for accounts that do not match expected patterns. Pass-the-Ticket: Event 4768/4769 with client address not matching the logon workstation.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4769 | eval ticket_life=Ticket_Options | stats count by Account_Name, ServiceName, Client_Address, Ticket_Options | where isnotnull(Ticket_Options) | sort -count",
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(4h)\n| where EventID == 4769\n| extend TicketLifeHours = toint(TicketOptions)\n| where Account !endswith '$'\n| summarize count() by Account, ServiceName, IpAddress, Computer\n| where count_ > 20\n| order by count_ desc",
+        "qradar": "SELECT username, \"Service Name\", sourceip, \"Ticket Options\", QIDNAME(qid) as event FROM events WHERE logsourcetypename(devicetype) = 'Microsoft Windows Security Event Log' AND \"Event ID\" IN ('4768','4769','4624') AND magnitude > 3 ORDER BY magnitude DESC LAST 4 HOURS",
+        "sigma": "title: Golden Ticket — Abnormal Kerberos TGT Usage\nstatus: experimental\ndescription: Detects potential Golden Ticket usage via anomalous Kerberos TGT characteristics\nlogsource:\n  product: windows\n  service: security\ndetection:\n  selection:\n    EventID: 4769\n    TicketOptions: '0x40810010'\n  condition: selection\nfalsepositives:\n  - Legitimate administrative Kerberos operations\nlevel: critical",
+        "velociraptor": "SELECT Name, Pid, Username, CreateTime\nFROM pslist()\nWHERE Name =~ '(?i)(mimikatz|sekurlsa|kerberos)'\nORDER BY CreateTime DESC",
+        "carbon_black": "(process_name:mimikatz.exe OR cmdline:\"kerberos::golden\" OR cmdline:\"kerberos::silver\" OR cmdline:\"sekurlsa::tickets\")",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">kerberos::golden;kerberos::silver;sekurlsa::tickets;Pass-the-Ticket</CommandLine></ProcessCreate>"
+      }
+    },
+    {
+      "title": "Detect DCSync attack — unauthorised AD replication",
+      "detail": "DCSync abuses the MS-DRSR replication protocol to pull password hashes from AD without code execution on the DC. The attacker's workstation impersonates a domain controller and requests replication. Indicators: Event 4662 on a DC with Access Mask 0x100 and GUID {1131f6aa-9c07-11d1-f79f-00c04fc2dcd2} (DS-Replication-Get-Changes-All) from a non-DC machine. Also check for mimikatz lsadump::dcsync in process command lines.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4662 ObjectType=\"{19195a5b-6da0-11d0-afd3-00c04fd930c9}\" NOT SubjectDomainName IN (\"NT AUTHORITY\",\"BUILTIN\") | stats count by SubjectUserName, SubjectLogonId, ComputerName | sort -count",
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(4h)\n| where EventID == 4662\n| where ObjectType contains '19195a5b-6da0-11d0-afd3-00c04fd930c9'\n| where SubjectAccount !endswith '$'\n| where SubjectDomainName !in ('NT AUTHORITY','BUILTIN')\n| project TimeGenerated, Computer, SubjectAccount, SubjectLogonId, ObjectName\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, sourceip, \"Object Type\" as objtype, \"Access Mask\" as mask, QIDNAME(qid) as event FROM events WHERE logsourcetypename(devicetype) = 'Microsoft Windows Security Event Log' AND \"Event ID\" = '4662' AND \"Access Mask\" IN ('0x100','0x40000') ORDER BY starttime DESC LAST 4 HOURS",
+        "sigma": "title: DCSync via Replication Rights Abuse\nstatus: stable\ndescription: Detects DCSync attack using replication privileges from a non-domain-controller\nlogsource:\n  product: windows\n  service: security\ndetection:\n  selection:\n    EventID: 4662\n    AccessMask: '0x100'\n    ObjectType|contains: '19195a5b-6da0-11d0-afd3-00c04fd930c9'\n  filter_dc:\n    SubjectUserName|endswith: '$'\n  condition: selection and not filter_dc\nfalsepositives:\n  - Legitimate AD replication tools run by domain admins\nlevel: critical",
+        "velociraptor": "SELECT Name, Pid, CommandLine, Username, CreateTime\nFROM pslist()\nWHERE CommandLine =~ '(?i)(lsadump::dcsync|dcsync|drsuapi)'\nORDER BY CreateTime DESC",
+        "carbon_black": "cmdline:\"lsadump::dcsync\" OR (process_name:mimikatz.exe AND cmdline:\"dcsync\")",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">lsadump::dcsync;drsuapi;NTDSUtil;ntds.dit</CommandLine></ProcessCreate>"
+      }
+    }
+  ],
+  "contSteps": [
+    {
+      "title": "Isolate the source account and workstation immediately",
+      "detail": "Disable the account used to request RC4 TGS tickets or perform DCSync. Force a password reset for any service account identified in Kerberoasting attempts. Isolate the workstation that sourced the requests using EDR network isolation. Do not simply lock the account if DCSync occurred — all domain hashes may be compromised.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4769 Ticket_Encryption_Type=0x17 | stats dc(ServiceName) as targets by Client_Address, Account_Name | where targets > 3 | sort -targets",
+        "kql": "SecurityEvent\n| where EventID == 4769\n| where TicketEncryptionType == '0x17'\n| summarize SPNTargets=dcount(ServiceName) by IpAddress, Account\n| where SPNTargets > 3\n| order by SPNTargets desc",
+        "qradar": "SELECT username, sourceip, COUNT(DISTINCT \"Service Name\") as spn_count FROM events WHERE \"Event ID\" = '4769' AND \"Ticket Encryption Type\" = '0x17' GROUP BY username, sourceip HAVING spn_count > 3 ORDER BY spn_count DESC LAST 1 HOURS",
+        "sigma": null,
+        "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name FROM netstat() WHERE Rport IN (389, 636, 3268, 3269, 88, 135, 445) ORDER BY Rport",
+        "carbon_black": "hostname:<attacker_host> AND (process_name:Rubeus.exe OR process_name:mimikatz.exe OR cmdline:kerberoast)",
+        "sysmon": "<NetworkConnect onmatch=\"include\"><DestinationPort condition=\"is any\">88;389;636;3268;3269</DestinationPort></NetworkConnect>"
+      }
+    },
+    {
+      "title": "Reset krbtgt password twice if Golden Ticket is suspected",
+      "detail": "If a Golden Ticket is confirmed or strongly suspected, the krbtgt account password must be reset TWICE (with at least 10-hour gap between resets per Microsoft guidance) to invalidate all outstanding tickets. Coordinate with the AD team. Plan for Kerberos authentication disruption across the domain during resets. Document all service disruptions.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4723 OR EventCode=4724 TargetUserName=krbtgt | table _time, SubjectUserName, TargetUserName, ComputerName",
+        "kql": "SecurityEvent\n| where EventID in (4723, 4724)\n| where TargetUserName == 'krbtgt'\n| project TimeGenerated, SubjectAccount, TargetUserName, Computer\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, \"Target Username\" as target, QIDNAME(qid) as event, starttime FROM events WHERE \"Event ID\" IN ('4723','4724') AND \"Target Username\" = 'krbtgt' ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Force domain-wide re-authentication",
+      "detail": "After krbtgt password resets, all active Kerberos sessions will become invalid. Coordinate with the business to plan a controlled forced re-authentication window. Monitor for authentication errors across the domain. Track recovery of services that use Kerberos-based authentication (IIS, SQL, SharePoint, etc.).",
+      "queries": {
+        "splunk": "index=wineventlog EventCode IN (4768, 4769, 4771) | timechart count span=5m by EventCode",
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(2h)\n| where EventID in (4768, 4769, 4771)\n| summarize count() by EventID, bin(TimeGenerated, 5m)\n| order by TimeGenerated desc",
+        "qradar": "SELECT \"Event ID\", COUNT(*) as auth_events, starttime FROM events WHERE \"Event ID\" IN ('4768','4769','4771') GROUP BY \"Event ID\", starttime ORDER BY starttime DESC LAST 2 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "eradSteps": [
+    {
+      "title": "Remove attacker tooling and persistence from compromised hosts",
+      "detail": "Hunt for and remove attacker tooling such as Mimikatz, Rubeus, SharpHound, BloodHound, or PowerSploit. Check for PowerShell scripts in common drop locations. Audit scheduled tasks, services, and WMI subscriptions for attacker persistence. Remove any new domain admin accounts or group membership additions.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4728 OR EventCode=4732 | table _time, SubjectUserName, MemberName, GroupName, ComputerName | sort _time",
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(24h)\n| where EventID in (4728, 4732, 4756)\n| project TimeGenerated, SubjectAccount, MemberName, TargetUserName, Computer\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, \"Member Name\" as member, \"Group Name\" as grp, QIDNAME(qid) as event FROM events WHERE \"Event ID\" IN ('4728','4732','4756') ORDER BY starttime DESC LAST 24 HOURS",
+        "sigma": null,
+        "velociraptor": "SELECT Key, Value, Mtime FROM read_reg_key(glob='HKLM/SYSTEM/CurrentControlSet/Services/*')\nWHERE Mtime > now() - 86400\nORDER BY Mtime DESC",
+        "carbon_black": "(process_name:mimikatz.exe OR process_name:Rubeus.exe OR process_name:SharpHound.exe OR cmdline:\"Invoke-BloodHound\" OR cmdline:\"Invoke-Mimikatz\")",
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">mimikatz;Rubeus;SharpHound</Image></ProcessCreate>"
+      }
+    },
+    {
+      "title": "Audit and remediate over-privileged accounts and SPNs",
+      "detail": "Review all service accounts with SPNs and remove unnecessary ones. Enforce AES-only Kerberos (disable RC4) via GPO (Network security: Configure encryption types for Kerberos). Implement tiered admin model. Enable Protected Users security group for all privileged accounts. Audit for accounts with DONT_REQ_PREAUTH enabled and remove the flag unless absolutely required.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4769 | stats dc(ServiceName) as spn_count by Account_Name | sort -spn_count | head 20",
+        "kql": "SecurityEvent\n| where EventID == 4769\n| where TicketEncryptionType == '0x17'\n| summarize SPNCount=dcount(ServiceName), RecentRequests=count() by Account\n| order by SPNCount desc\n| take 20",
+        "qradar": "SELECT username, COUNT(DISTINCT \"Service Name\") as spn_count FROM events WHERE \"Event ID\" = '4769' GROUP BY username ORDER BY spn_count DESC LAST 7 DAYS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "recSteps": [
+    {
+      "title": "Restore verified-clean domain controllers from backup if required",
+      "detail": "If DCSync confirmed domain-wide credential compromise or if DCs were directly compromised, consider rebuilding DCs from known-good snapshots. Restore to an isolated network segment, verify integrity, then reconnect. All AD objects must be reviewed for attacker-introduced changes (new accounts, modified ACLs, new GPOs).",
+      "queries": {
+        "splunk": "index=wineventlog EventCode=4720 OR EventCode=4722 | table _time, SubjectUserName, TargetUserName, ComputerName | sort _time",
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(72h)\n| where EventID in (4720, 4722, 4738)\n| project TimeGenerated, SubjectAccount, TargetUserName, Computer\n| order by TimeGenerated desc",
+        "qradar": "SELECT username, \"Target Username\" as new_account, QIDNAME(qid) as event FROM events WHERE \"Event ID\" IN ('4720','4722','4738') ORDER BY starttime DESC LAST 72 HOURS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    },
+    {
+      "title": "Monitor intensively for 30 days post-incident",
+      "detail": "Kerberos attacks often indicate a prolonged dwell time. After eradication, monitor for recurrence of RC4 TGS requests, new SPN creation, AD replication events from non-DCs, and lateral movement. Alert on any new domain admin account creation or group membership changes. Maintain elevated alert priority for 30 days.",
+      "queries": {
+        "splunk": "index=wineventlog EventCode IN (4769, 4662, 4728) | timechart count span=1h by EventCode",
+        "kql": "SecurityEvent\n| where TimeGenerated > ago(30d)\n| where EventID in (4769, 4662, 4728, 4720)\n| summarize count() by EventID, bin(TimeGenerated, 1h)\n| order by TimeGenerated desc",
+        "qradar": "SELECT \"Event ID\", COUNT(*) as count, starttime FROM events WHERE \"Event ID\" IN ('4769','4662','4728','4720') GROUP BY \"Event ID\", starttime ORDER BY starttime DESC LAST 7 DAYS",
+        "sigma": null,
+        "velociraptor": null,
+        "carbon_black": null,
+        "sysmon": null
+      }
+    }
+  ],
+  "metrics": [
+    { "name": "Detection Time", "target": "<15 minutes from first RC4 TGS request" },
+    { "name": "Account Isolation SLA", "target": "<10 minutes from detection" },
+    { "name": "krbtgt Reset", "target": "Within 1 hour if Golden Ticket confirmed" },
+    { "name": "Full Domain Recovery", "target": "<8 hours" }
+  ]
+}
