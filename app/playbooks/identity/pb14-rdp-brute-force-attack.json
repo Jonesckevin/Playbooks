@@ -224,5 +224,6 @@
       "name": "RDP Lockdown Coverage",
       "target": "100% of internet-facing RDP endpoints secured or removed"
     }
-  ]
+  ],
+  "updated": "2026-05-18"
 }
