@@ -65,9 +65,10 @@ body{font-family:var(--sans);background:var(--bg2);color:var(--text);line-height
 .mobile-nav-toggle{display:none}
 .mobile-nav-backdrop{display:none}
 .sidebar{background:var(--bg);border-right:1px solid var(--border);position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
-.sb-head{padding:1rem 1.1rem .9rem;border-bottom:1px solid var(--border);flex-shrink:0}
-.sb-title{font-size:13px;font-weight:700;color:var(--text)}
-.sb-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.sb-head{padding:.75rem 1.1rem .7rem;border-bottom:1px solid var(--border);flex-shrink:0}
+.sb-logo{display:block;width:48px;height:48px;flex-shrink:0}
+.sb-title{font-size:13px;font-weight:700;color:var(--text);line-height:1.2}
+.sb-sub{font-size:11px;color:var(--text3);margin-top:2px;line-height:1.2}
 .sb-search{padding:.6rem 1.1rem;border-bottom:1px solid var(--border);flex-shrink:0}
 .sb-search input{width:100%;font-size:12px;padding:5px 8px;border:1px solid var(--border2);border-radius:var(--r);background:var(--bg2);color:var(--text);outline:none}
 .sb-search input:focus{border-color:var(--blue-t)}
@@ -337,8 +338,9 @@ details[open]>.step-query-summary{border-bottom:1px solid var(--border)}
 .sb-create-sub { font-size: 10px; opacity: 0.72; letter-spacing: .01em; }
 
 /* ===== THEME TOGGLE BUTTON ===== */
-.sb-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.sb-head-text { flex: 1; min-width: 0; }
+.sb-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sb-head-text { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.sb-brand-text { min-width: 0; }
 .theme-toggle-btn {
   flex-shrink: 0;
   background: transparent;
@@ -350,7 +352,7 @@ details[open]>.step-query-summary{border-bottom:1px solid var(--border)}
   line-height: 1;
   cursor: pointer;
   transition: all 0.15s;
-  margin-top: 2px;
+  margin-top: 0;
 }
 .theme-toggle-btn:hover { background: var(--bg2); color: var(--text); border-color: var(--text3); }
 
@@ -480,18 +482,14 @@ details[open]>.step-query-summary{border-bottom:1px solid var(--border)}
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
-.checklist-toggle-btn {
-  padding: 5px 14px;
-  border-radius: 6px;
-  border: 1.5px solid var(--blue-t);
-  background: transparent;
-  color: var(--blue-t);
+.incident-start-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
   font-size: 0.82rem;
-  cursor: pointer;
-  transition: all 0.15s;
+  color: var(--text2);
 }
-.checklist-toggle-btn:hover,
-.checklist-toggle-btn.active { background: var(--blue-t); color: #fff; }
 .checklist-progress-wrap {
   flex: 1; min-width: 120px; max-width: 260px;
   height: 8px; background: var(--border2); border-radius: 4px; overflow: hidden;

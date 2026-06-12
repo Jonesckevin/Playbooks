@@ -75,3 +75,31 @@ docker save soc-playbooks:latest | gzip > soc-playbooks-v4.tar.gz
 docker load < soc-playbooks-v4.tar.gz
 docker compose up -d
 ```
+
+## Adding custom playbooks After Build
+
+1. Create a JSON file for your playbook, e.g. `my_playbook.json`, with the following structure:
+
+```json
+{
+  "name": "My Custom Playbook",
+  "description": "A description of my custom playbook.",
+  "steps": [
+    {
+      "title": "Step 1: Initial Analysis",
+      "description": "Perform initial analysis of the incident.",
+      "tool_query": "SELECT * FROM security_events WHERE event_type = 'suspicious'"
+    },
+    {
+      "title": "Step 2: Containment",
+      "description": "Contain the affected systems.",
+      "tool_query": "UPDATE firewall_rules SET action = 'block' WHERE ip_address = 'malicious_ip'"
+    }
+  ]
+}
+```
+
+2. Copy the JSON file to the active playbook directory:
+
+```bash
+cp my_playbook.json playbooks-data/

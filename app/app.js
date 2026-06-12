@@ -4,6 +4,9 @@ const API_LOAD = "cgi-bin/load_playbooks.sh";
 const API_SAVE = "cgi-bin/save_playbook.sh";
 const API_UPDATE = "cgi-bin/update_playbook.sh";
 const API_DELETE = "cgi-bin/delete_playbook.sh";
+const API_INCIDENT_LOAD = "cgi-bin/load_incident_state.sh";
+const API_INCIDENT_SAVE = "cgi-bin/save_incident_state.sh";
+const API_INCIDENT_DELETE = "cgi-bin/delete_incident_state.sh";
 const MITRE_TECHNIQUES_URL = "playbooks/mitre-techniques.json";
 const NAVIGATOR_APP_URL = "attack-navigator/index.html";
 const DEFAULT_TOOL_FALLBACK = "security_onion";
@@ -48,13 +51,13 @@ const state = {
   mitreTags: [],
   mitreLookup: new Map(),
   mitreIndex: [],
+  incidentStateById: new Map(),
   navigatorLayerObjectUrl: null,
   navigatorCustomLayerObjectUrl: null,
   navigatorLastLayer: null,
   navigatorScope: "all",
   activeCardSevFilter: "all",
   activeSourceFilter: "all",
-  checklistEnabled: false,
   activeTools: ["security_onion", "sysmon", "osquery", "velociraptor", "elastic", "carbon_black"],
 };
 
@@ -664,7 +667,73 @@ function setCardView(view, btn) {
   renderCards();
 }
 
-function stepToHtml(step, idx, activeTool, pbId, checklistEnabled, checklist, globalIdx) {
+function normalizeIncidentState(value) {
+  const raw = value || {};
+  const stepChecks = (raw.stepChecks && typeof raw.stepChecks === "object") ? raw.stepChecks : {};
+  const normalizedStepChecks = {};
+  for (const [k, v] of Object.entries(stepChecks)) {
+    normalizedStepChecks[String(k)] = !!v;
+  }
+  return {
+    id: String(raw.id || "").trim(),
+    startedDecision: !!raw.startedDecision,
+    stepChecks: normalizedStepChecks,
+    updatedAt: String(raw.updatedAt || "")
+  };
+}
+
+function getIncidentState(pbId) {
+  const current = state.incidentStateById.get(pbId);
+  if (current) return current;
+  return { id: pbId, startedDecision: false, stepChecks: {}, updatedAt: "" };
+}
+
+async function loadIncidentStates() {
+  state.incidentStateById.clear();
+  const payload = await fetchJson(API_INCIDENT_LOAD).catch(() => []);
+  if (!Array.isArray(payload)) return;
+  for (const item of payload) {
+    const normalized = normalizeIncidentState(item);
+    if (!normalized.id) continue;
+    state.incidentStateById.set(normalized.id, normalized);
+  }
+}
+
+async function saveIncidentState(pbId, patch) {
+  const current = getIncidentState(pbId);
+  const merged = normalizeIncidentState({
+    ...current,
+    ...patch,
+    id: pbId,
+    stepChecks: {
+      ...current.stepChecks,
+      ...(patch?.stepChecks || {})
+    },
+    updatedAt: new Date().toISOString()
+  });
+
+  const res = await fetch(API_INCIDENT_SAVE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(merged)
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.error) {
+    throw new Error(body.error || "Failed to save incident state.");
+  }
+  state.incidentStateById.set(pbId, merged);
+}
+
+async function resetIncidentState(pbId) {
+  const res = await fetch(`${API_INCIDENT_DELETE}?id=${encodeURIComponent(pbId)}`, { method: "DELETE" });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.error) {
+    throw new Error(body.error || "Failed to reset incident state.");
+  }
+  state.incidentStateById.delete(pbId);
+}
+
+function stepToHtml(step, idx, activeTool, pbId, checklist, globalIdx) {
   const qRaw = step.queries?.[activeTool];
   const q = hasQueryValue(qRaw) ? String(qRaw) : "";
   const qLabelClass = `step-q-label--${activeTool}`;
@@ -673,9 +742,9 @@ function stepToHtml(step, idx, activeTool, pbId, checklistEnabled, checklist, gl
   const sigmaState = activeTool === "sigma" ? validateSigma(q) : null;
   const sigmaBadge = sigmaState ? `<span class="badge ${sigmaState.ok ? "b-green" : "b-red"}" style="margin-left:8px">${sigmaState.ok ? "Valid Sigma" : sigmaState.reason}</span>` : "";
 
-  const checked = checklistEnabled && checklist && checklist[globalIdx];
-  const wrapOpen = checklistEnabled ? `<div class="step-checklist${checked ? ' step-checked' : ''}"><input type="checkbox" class="step-check" ${checked ? 'checked' : ''} onchange="toggleChecklistStep('${pbId}',${globalIdx},this.checked)"><div class="step-body">` : '';
-  const wrapClose = checklistEnabled ? '</div></div>' : '';
+  const checked = checklist && checklist[globalIdx];
+  const wrapOpen = `<div class="step-checklist${checked ? " step-checked" : ""}"><input type="checkbox" class="step-check" ${checked ? "checked" : ""} onchange="toggleChecklistStep('${pbId}',${globalIdx},this.checked)"><div class="step-body">`;
+  const wrapClose = "</div></div>";
 
   const stepContent = `
     <div class="step">
@@ -693,7 +762,7 @@ function stepToHtml(step, idx, activeTool, pbId, checklistEnabled, checklist, gl
   return wrapOpen + stepContent + wrapClose;
 }
 
-function sectionToHtml(title, steps, activeTool, pbId, checklistEnabled, checklist, offset) {
+function sectionToHtml(title, steps, activeTool, pbId, checklist, offset) {
   if (!steps.length) {
     return `
       <div class="sec">
@@ -705,7 +774,7 @@ function sectionToHtml(title, steps, activeTool, pbId, checklistEnabled, checkli
   return `
     <div class="sec">
       <div class="sec-label">${esc(title)}</div>
-      <div class="steps">${steps.map((s, i) => stepToHtml(s, i, activeTool, pbId, checklistEnabled, checklist, (offset || 0) + i)).join("")}</div>
+      <div class="steps">${steps.map((s, i) => stepToHtml(s, i, activeTool, pbId, checklist, (offset || 0) + i)).join("")}</div>
     </div>
   `;
 }
@@ -717,7 +786,8 @@ function renderDetail(playbook, activeTool = DEFAULT_TOOL) {
   const tabs = state.activeTools.map((tool) => `<button class="tool-tab ${tool === activeTool ? "active" : ""}" onclick="switchToolTab('${esc(playbook.id)}','${tool}')">${esc(TOOL_LABELS[tool])}</button>`).join("");
   const mitre = playbook.mitre.map((m) => renderMitreLink(m, false)).join("");
 
-  const checklist = loadChecklist(playbook.id);
+  const incidentState = getIncidentState(playbook.id);
+  const checklist = incidentState.stepChecks || {};
   const detSteps = playbook.investigation?.detectionAnalysis || [];
   const contSteps = playbook.investigation?.containment || [];
   const eradSteps = playbook.investigation?.eradication || [];
@@ -729,16 +799,15 @@ function renderDetail(playbook, activeTool = DEFAULT_TOOL) {
 
   const checklistBarHtml = `
     <div class="checklist-bar">
-      <button class="checklist-toggle-btn${state.checklistEnabled ? ' active' : ''}" onclick="toggleChecklist('${esc(playbook.id)}')">
-        ${state.checklistEnabled ? '✓ Checklist On' : '▷ Start Incident'}
-      </button>
-      ${state.checklistEnabled ? `
-        <div class="checklist-progress-wrap">
-          <div class="checklist-progress" style="width:${progressPct}%"></div>
-        </div>
-        <span class="checklist-done">${doneSteps}/${totalSteps} steps</span>
-        <button class="checklist-reset-btn" onclick="resetChecklist('${esc(playbook.id)}')">Reset</button>
-      ` : ''}
+      <label class="incident-start-row">
+        <input type="checkbox" class="step-check" ${incidentState.startedDecision ? "checked" : ""} onchange="toggleStartDecision('${esc(playbook.id)}',this.checked)">
+        <span>Start decision recorded</span>
+      </label>
+      <div class="checklist-progress-wrap">
+        <div class="checklist-progress" style="width:${progressPct}%"></div>
+      </div>
+      <span class="checklist-done">${doneSteps}/${totalSteps} steps</span>
+      <button class="checklist-reset-btn" onclick="resetChecklist('${esc(playbook.id)}')">Reset</button>
     </div>`;
 
   const relatedHtml = (playbook.related && playbook.related.length > 0) ? `
@@ -775,10 +844,10 @@ function renderDetail(playbook, activeTool = DEFAULT_TOOL) {
     ${checklistBarHtml}
     ${playbook.scenario ? `<div class="scenario-box">${esc(playbook.scenario)}</div>` : ""}
     <div class="tool-tabs-bar">${tabs}</div>
-    ${sectionToHtml("Detection & analysis", detSteps, activeTool, playbook.id, state.checklistEnabled, checklist, detOffset)}
-    ${sectionToHtml("Containment", contSteps, activeTool, playbook.id, state.checklistEnabled, checklist, contOffset)}
-    ${sectionToHtml("Eradication", eradSteps, activeTool, playbook.id, state.checklistEnabled, checklist, eradOffset)}
-    ${sectionToHtml("Recovery & lessons learned", recSteps, activeTool, playbook.id, state.checklistEnabled, checklist, recOffset)}
+    ${sectionToHtml("Detection & analysis", detSteps, activeTool, playbook.id, checklist, detOffset)}
+    ${sectionToHtml("Containment", contSteps, activeTool, playbook.id, checklist, contOffset)}
+    ${sectionToHtml("Eradication", eradSteps, activeTool, playbook.id, checklist, eradOffset)}
+    ${sectionToHtml("Recovery & lessons learned", recSteps, activeTool, playbook.id, checklist, recOffset)}
     ${relatedHtml}
   `;
 
@@ -806,7 +875,6 @@ function showPanel(name, navEl) {
 function openPlaybook(id, navEl) {
   const pb = state.allPlaybooks.find((p) => p.id === id);
   if (!pb) return;
-  state.checklistEnabled = false;
   state.selectedId = id;
   renderDetail(pb, DEFAULT_TOOL);
   showPanel("detail", navEl || document.getElementById(`nav-${id}`));
@@ -874,29 +942,34 @@ function filterSeverity(sev, btn) {  state.activeCardSevFilter = sev;
   renderCards();
 }
 
-function loadChecklist(pbId) {
+async function toggleChecklistStep(pbId, stepIdx, checked) {
+  const current = getIncidentState(pbId);
+  const nextChecks = { ...(current.stepChecks || {}), [String(stepIdx)]: !!checked };
   try {
-    return JSON.parse(localStorage.getItem(`checklist-${pbId}`) || '{}');
-  } catch { return {}; }
-}
-function saveChecklist(pbId, data) {
-  localStorage.setItem(`checklist-${pbId}`, JSON.stringify(data));
-}
-function toggleChecklist(pbId) {
-  const pb = getPlaybookById(pbId);
-  if (!pb) return;
-  state.checklistEnabled = !state.checklistEnabled;
-  renderDetail(pb);
-}
-function toggleChecklistStep(pbId, stepIdx, checked) {
-  const data = loadChecklist(pbId);
-  data[stepIdx] = checked;
-  saveChecklist(pbId, data);
+    await saveIncidentState(pbId, { stepChecks: nextChecks });
+  } catch (err) {
+    alert(err.message || "Unable to save checklist state.");
+  }
   const pb = getPlaybookById(pbId);
   if (pb) renderDetail(pb);
 }
-function resetChecklist(pbId) {
-  localStorage.removeItem(`checklist-${pbId}`);
+
+async function toggleStartDecision(pbId, checked) {
+  try {
+    await saveIncidentState(pbId, { startedDecision: !!checked });
+  } catch (err) {
+    alert(err.message || "Unable to save start decision.");
+  }
+  const pb = getPlaybookById(pbId);
+  if (pb) renderDetail(pb);
+}
+
+async function resetChecklist(pbId) {
+  try {
+    await resetIncidentState(pbId);
+  } catch (err) {
+    alert(err.message || "Unable to reset checklist state.");
+  }
   const pb = getPlaybookById(pbId);
   if (pb) renderDetail(pb);
 }
@@ -1221,6 +1294,7 @@ function exportSoar(pbId) {
 
 async function refreshData() {
   await loadCustomPlaybooks();
+  await loadIncidentStates();
   buildMergedPlaybooks();
   renderSidebar();
   renderCards();
@@ -1329,8 +1403,8 @@ window.filterSource = filterSource;
 window.filterSourceSelect = filterSourceSelect;
 window.filterSeveritySelect = filterSeveritySelect;
 window.setCardView = setCardView;
-window.toggleChecklist = toggleChecklist;
 window.toggleChecklistStep = toggleChecklistStep;
+window.toggleStartDecision = toggleStartDecision;
 window.resetChecklist = resetChecklist;
 window.printPlaybook = printPlaybook;
 window.exportSoar = exportSoar;
