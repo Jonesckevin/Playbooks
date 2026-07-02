@@ -951,7 +951,7 @@ function renderDetail(playbook, activeTool = DEFAULT_TOOL) {
       <button class="btn btn-secondary" onclick="startEdit('${esc(playbook.id)}')">Edit</button>
       <button class="btn btn-danger" onclick="deletePlaybook('${esc(playbook.id)}')">Delete / Revert</button>
       <button class="btn btn-print" onclick="printPlaybook()">🖨 Print</button>
-      <button class="btn btn-soar" onclick="exportSoar('${esc(playbook.id)}')">⬇ Export SOAR</button>
+      <button class="btn btn-soar" onclick="exportSoar('${esc(playbook.id)}')">⬇ Export</button>
     </div>
     ${checklistBarHtml}
     ${playbook.scenario ? `<div class="scenario-box">${renderMarkdown(playbook.scenario)}</div>` : ""}
