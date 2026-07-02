@@ -59,6 +59,8 @@ const state = {
   activeCardSevFilter: "all",
   activeSourceFilter: "all",
   activeTools: ["security_onion", "sysmon", "osquery", "velociraptor", "elastic", "carbon_black"],
+  // Lazy loading: tracks which library playbook files have been fully fetched
+  _libraryFileFetched: new Set(),
 };
 
 function toggleMobileNav() {
@@ -83,6 +85,24 @@ const esc = (value) => String(value ?? "")
   .replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#39;");
+
+// Render markdown to HTML with sanitization
+function renderMarkdown(markdown) {
+  if (!markdown || typeof markdown !== "string") return "";
+  // Configure marked to not allow dangerous HTML but allow code blocks
+  if (typeof marked !== "undefined") {
+    try {
+      return marked.parse(markdown, {
+        breaks: true,      // Convert line breaks to <br>
+        gfm: true          // Enable GitHub Flavored Markdown
+      });
+    } catch (err) {
+      console.error("Markdown parsing error:", err);
+      return esc(markdown);
+    }
+  }
+  return esc(markdown);
+}
 
 function toSlug(input) {
   return String(input ?? "").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
@@ -286,10 +306,13 @@ function applyNavigatorLightTheme(frame) {
       ".theme-override-light .mat-mdc-tab-nav-bar, .theme-override-light .controlsContainer, .theme-override-light .mat-toolbar, .theme-override-light .mat-mdc-menu-panel { box-shadow: none !important; background: #ffffff !important; color: #1f2937 !important; }",
       ".theme-override-light .mdc-tab__text-label, .theme-override-light .mdc-button__label, .theme-override-light button, .theme-override-light .mat-icon, .theme-override-light .material-icons { color: #1f2937 !important; }",
       ".theme-override-light .mdc-tab--active .mdc-tab__text-label { color: #185fa5 !important; font-weight: 700 !important; }",
+      ".theme-override-light .mdc-tab:not(.mdc-tab--active) .mdc-tab__text-label { color: #1f2937 !important; }",
       ".theme-override-light button:hover, .theme-override-light .mat-mdc-menu-item:hover, .theme-override-light .controlsContainer .control-sections > li .control-row-item .control-row-button:hover { background-color: #e4effb !important; color: #0f4f8a !important; }",
       ".theme-override-light .control-row-button, .theme-override-light .mat-mdc-menu-item { border-color: #cbd5e1 !important; }",
       ".theme-override-light a { color: #185fa5 !important; }",
-      ".theme-override-light a:hover { color: #0f4f8a !important; }"
+      ".theme-override-light a:hover { color: #0f4f8a !important; }",
+      ".theme-override-light text, .theme-override-light tspan { fill: #1f2937 !important; }",
+      ".theme-override-light .mdc-tab-bar__content { background: #ffffff !important; }"
     ].join("\n");
   } catch (err) {
     console.warn("Navigator light theme override failed:", err);
@@ -459,7 +482,7 @@ function normalizePlaybook(pb) {
     num: pb.num ?? 0,
     name: pb.name || "Untitled",
     cat: pb.cat || "Other",
-    sev: (pb.sev || "medium").toLowerCase(),
+    sev: (pb.sev || pb.severity || "medium").toLowerCase(),
     type: pb.type || pb.cat || "Other",
     source: pb.source || "library",
     scenario: pb.scenario || "",
@@ -475,8 +498,30 @@ function normalizePlaybook(pb) {
       recovery: normalizeSteps(recoverySource)
     },
     updated: pb.updated || "",
-    related: Array.isArray(pb.related) ? pb.related : []
+    related: Array.isArray(pb.related) ? pb.related : [],
+    // Technique-specific fields (present when cat === "Techniques")
+    tactic: pb.tactic || "",
+    tacticId: pb.tacticId || "",
+    tacticLabel: pb.tacticLabel || "",
+    domain: pb.domain || "",
+    domainLabel: pb.domainLabel || "",
+    isSubtechnique: pb.isSubtechnique || false,
+    parentId: pb.parentId || null,
+    platforms: Array.isArray(pb.platforms) ? pb.platforms : [],
+    dataSources: Array.isArray(pb.dataSources) ? pb.dataSources : [],
   };
+}
+
+function isValidPlaybookRecord(pb) {
+  if (!pb || typeof pb !== "object") return false;
+  if (typeof pb.id !== "string" || !pb.id.trim()) return false;
+  if (typeof pb.name !== "string" || !pb.name.trim()) return false;
+  if (typeof pb.cat !== "string" || !pb.cat.trim()) return false;
+  if (pb.investigation == null) return true;
+  if (typeof pb.investigation !== "object") return false;
+
+  const sections = ["detectionAnalysis", "containment", "eradication", "recovery"];
+  return sections.every((key) => pb.investigation[key] == null || Array.isArray(pb.investigation[key]));
 }
 
 async function fetchJson(url) {
@@ -490,13 +535,14 @@ async function loadManifest() {
   state.manifest = Array.isArray(data.playbooks) ? data.playbooks : [];
 }
 
-async function loadLibraryDetails() {
-  const tasks = state.manifest.map(async (item) => {
-    const data = await fetchJson(`${LIBRARY_ROOT}/${item.file}`);
-    const merged = normalizePlaybook({ ...item, ...data, source: "library" });
-    state.libraryById.set(merged.id, merged);
-  });
-  await Promise.all(tasks);
+// Lazy loading: create lightweight stubs from manifest data — no HTTP requests.
+// Full playbook JSON is fetched on demand when a playbook is opened.
+function initLibraryStubs() {
+  for (const item of state.manifest) {
+    if (!item?.id || !item?.name || !item?.cat) continue;
+    const stub = normalizePlaybook({ ...item, source: "library" });
+    state.libraryById.set(stub.id, stub);
+  }
 }
 
 async function loadCustomPlaybooks() {
@@ -506,6 +552,10 @@ async function loadCustomPlaybooks() {
   for (const raw of payload) {
     if (!raw?.id) continue;
     const item = normalizePlaybook(raw);
+    if (!isValidPlaybookRecord(item)) {
+      console.warn(`Skipping invalid custom playbook: ${raw.id}`);
+      continue;
+    }
     state.customById.set(item.id, item);
   }
 }
@@ -524,6 +574,22 @@ function buildMergedPlaybooks() {
   state.allPlaybooks = Array.from(merged.values()).sort((a, b) => (a.num || 0) - (b.num || 0));
 }
 
+// ATT&CK kill-chain tactic order for sidebar grouping
+const TACTIC_SIDEBAR_ORDER = [
+  "reconnaissance","resource-development","initial-access","execution","persistence",
+  "privilege-escalation","defense-evasion","credential-access","discovery",
+  "lateral-movement","collection","command-and-control","exfiltration","impact",
+  // ICS
+  "impair-process-control","inhibit-response-function","evasion",
+  // Mobile
+  "network-effects","remote-service-effects",
+];
+
+function tacticSortKey(slug) {
+  const idx = TACTIC_SIDEBAR_ORDER.indexOf(slug);
+  return idx === -1 ? 99 : idx;
+}
+
 function groupedByCategory() {
   const groups = new Map();
   for (const pb of state.allPlaybooks) {
@@ -534,12 +600,58 @@ function groupedByCategory() {
   return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 }
 
+function renderTechniquesSection(items) {
+  // Group by tactic
+  const tacticMap = new Map();
+  for (const pb of items) {
+    const tKey = pb.tactic || "unknown";
+    if (!tacticMap.has(tKey)) tacticMap.set(tKey, []);
+    tacticMap.get(tKey).push(pb);
+  }
+
+  // Sort tactics by kill-chain order, then alphabetically within same order
+  const sortedTactics = Array.from(tacticMap.entries()).sort(([a], [b]) => {
+    const diff = tacticSortKey(a) - tacticSortKey(b);
+    return diff !== 0 ? diff : a.localeCompare(b);
+  });
+
+  const outerGroupId = "g-techniques";
+
+  const tacticHtml = sortedTactics.map(([tactic, tacItems]) => {
+    const tacticLabel = tacItems[0]?.tacticLabel || tactic.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const tacticId    = tacItems[0]?.tacticId   || "";
+    const domainLabel = tacItems[0]?.domain      || "enterprise";
+    const subGroupId  = `g-tac-${toSlug(tactic)}`;
+    const navItems = tacItems.map((pb) => {
+      const dotClass = pb.sev === "critical" ? "d-crit" : pb.sev === "high" ? "d-high" : pb.sev === "medium" ? "d-med" : "d-low";
+      // Strip leading "Txxxx – " prefix from display name
+      const displayName = pb.name.replace(/^T[\d.]+\s*[–-]\s*/, "");
+      const techId = pb.mitre || (pb.name.match(/^(T[\d.]+)/) || [])[1] || "";
+      return `<div class="nav-item nav-item-technique" data-title="${esc(pb.name)}" data-cat="${esc(pb.cat)}" id="nav-${esc(pb.id)}" onclick="openPlaybook('${esc(pb.id)}', this)"><span class="dot ${dotClass}"></span><span class="nav-tech-id">${esc(techId)}</span><span class="nav-tech-name">${esc(displayName)}</span></div>`;
+    }).join("");
+    const headerLabel = tacticId ? `${tacticLabel} <span class="tactic-id-badge">${esc(tacticId)}</span>` : esc(tacticLabel);
+    return `<div class="sb-tactic-group"><div class="sb-tactic-header" onclick="toggleGroup('${subGroupId}')"><span class="sb-tactic-label">${headerLabel}</span><span class="sb-tactic-meta"><span class="sb-group-count">${tacItems.length}</span><span class="sb-group-arr" id="${subGroupId}-arr">▸</span></span></div><div class="nav-group" id="${subGroupId}" style="display:none">${navItems}</div></div>`;
+  }).join("");
+
+  return `
+    <div class="sb-section" style="--cat-clr:#7c3aed">
+      <div class="sb-group-header" onclick="toggleGroup('${outerGroupId}')">
+        <span class="sb-group-label">Techniques</span>
+        <span class="sb-group-meta"><span class="sb-group-count">${items.length}</span><span class="sb-group-arr" id="${outerGroupId}-arr">▾</span></span>
+      </div>
+      <div class="nav-group" id="${outerGroupId}">${tacticHtml}</div>
+    </div>`;
+}
+
 function renderSidebar() {
   const host = document.getElementById("dyn-nav");
   if (!host) return;
 
   const groups = groupedByCategory();
   host.innerHTML = groups.map(([cat, items]) => {
+    if (cat === "Techniques") {
+      return renderTechniquesSection(items);
+    }
     const groupId = `g-${toSlug(cat) || "other"}`;
     const color = items[0]?.sev === "critical" ? "#a32d2d" : items[0]?.sev === "high" ? "#854f0b" : items[0]?.sev === "medium" ? "#185fa5" : "#3b6d11";
     const nav = items.map((pb) => `
@@ -581,7 +693,7 @@ function renderCards() {
   });
   const visibleIds = new Set(visible.map((pb) => pb.id));
 
-  if (state.activeCardView === "table") {
+  if (state.activeCardView === "grid") {
     host.classList.add("cards-list-mode");
     host.innerHTML = `
       <div class="cards-table-wrap">
@@ -751,7 +863,7 @@ function stepToHtml(step, idx, activeTool, pbId, checklist, globalIdx) {
       <div class="step-n">${idx + 1}</div>
       <div>
         <div class="step-t">${esc(step.title || "Untitled step")}</div>
-        ${step.detail ? `<div class="step-d">${esc(step.detail)}</div>` : ""}
+        ${step.detail ? `<div class="step-d">${renderMarkdown(step.detail)}</div>` : ""}
         <div class="step-q ${qClass}">
           <span class="step-q-label ${qLabelClass}">${esc(TOOL_LABELS[activeTool])}${sigmaBadge}</span>
           ${q ? `<pre><code class="${codeClass}">${esc(q)}</code></pre>` : '<div class="no-query-msg">No query defined for this tool on this step.</div>'}
@@ -842,7 +954,7 @@ function renderDetail(playbook, activeTool = DEFAULT_TOOL) {
       <button class="btn btn-soar" onclick="exportSoar('${esc(playbook.id)}')">⬇ Export SOAR</button>
     </div>
     ${checklistBarHtml}
-    ${playbook.scenario ? `<div class="scenario-box">${esc(playbook.scenario)}</div>` : ""}
+    ${playbook.scenario ? `<div class="scenario-box">${renderMarkdown(playbook.scenario)}</div>` : ""}
     <div class="tool-tabs-bar">${tabs}</div>
     ${sectionToHtml("Detection & analysis", detSteps, activeTool, playbook.id, checklist, detOffset)}
     ${sectionToHtml("Containment", contSteps, activeTool, playbook.id, checklist, contOffset)}
@@ -872,9 +984,50 @@ function showPanel(name, navEl) {
   if (isMobileViewport()) closeMobileNav();
 }
 
-function openPlaybook(id, navEl) {
-  const pb = state.allPlaybooks.find((p) => p.id === id);
+async function openPlaybook(id, navEl) {
+  let pb = state.allPlaybooks.find((p) => p.id === id);
   if (!pb) return;
+
+  // If this playbook hasn't been fully loaded yet, fetch the detail JSON now
+  if (!state._libraryFileFetched.has(id)) {
+    const manifestItem = state.manifest.find((m) => m.id === id);
+    if (manifestItem?.file) {
+      // Show loading spinner while fetching
+      const detailEl = document.getElementById("detail-content");
+      if (detailEl) {
+        detailEl.innerHTML = '<div class="detail-loading"><span class="detail-spinner"></span><span class="detail-loading-msg">Loading…</span></div>';
+      }
+      showPanel("detail", navEl || document.getElementById(`nav-${id}`));
+      try {
+        const data = await fetchJson(`${LIBRARY_ROOT}/${manifestItem.file}`);
+        state._libraryFileFetched.add(id);
+        const libPb = normalizePlaybook({ ...manifestItem, ...data, source: "library" });
+        state.libraryById.set(id, libPb);
+        // Re-apply any custom/override data on top of the freshly loaded library base
+        const custom = state.customById.get(id);
+        if (custom) {
+          const merged = normalizePlaybook({ ...manifestItem, ...data, ...custom,
+            source: custom.source === "custom" ? "custom" : "library-override" });
+          state.libraryById.set(id, merged);
+        }
+        // Refresh the allPlaybooks entry so cards/nav stay in sync
+        const idx = state.allPlaybooks.findIndex((p) => p.id === id);
+        if (idx >= 0) state.allPlaybooks[idx] = state.libraryById.get(id);
+        pb = state.libraryById.get(id);
+      } catch (err) {
+        console.warn(`Failed to load playbook detail for ${id}:`, err);
+        // Fall back to stub/custom data already in pb
+      }
+    } else {
+      // Pure custom playbook (no library base) — already fully loaded via CGI
+      pb = state.customById.get(id) || pb;
+      state._libraryFileFetched.add(id); // mark to skip future fetch attempts
+    }
+  } else {
+    // Already fetched — use the cached fully-loaded version
+    pb = state.libraryById.get(id) || state.customById.get(id) || pb;
+  }
+
   state.selectedId = id;
   renderDetail(pb, DEFAULT_TOOL);
   showPanel("detail", navEl || document.getElementById(`nav-${id}`));
@@ -903,7 +1056,17 @@ function searchNav(input) {
     if (item.id === "nav-home" || item.id === "nav-base" || item.id === "nav-create") return;
     const title = (item.dataset.title || item.textContent || "").toLowerCase();
     const cat = (item.dataset.cat || "").toLowerCase();
-    item.classList.toggle("hidden", q && !(title.includes(q) || cat.includes(q)));
+    const visible = !q || title.includes(q) || cat.includes(q);
+    item.classList.toggle("hidden", !visible);
+    // If this is a technique item and it matches, expand parent tactic group
+    if (visible && q && item.classList.contains("nav-item-technique")) {
+      const parentGroup = item.closest(".nav-group");
+      if (parentGroup && parentGroup.style.display === "none") {
+        parentGroup.style.display = "block";
+        const arr = document.getElementById(`${parentGroup.id}-arr`);
+        if (arr) arr.textContent = "▾";
+      }
+    }
   });
 }
 
@@ -1117,6 +1280,11 @@ function setEditMode(editing, playbook) {
   }
 }
 
+function onCatChange(val) {
+  const row = document.getElementById("f-tactic-row");
+  if (row) row.style.display = val === "Techniques" ? "block" : "none";
+}
+
 function fillFormFromPlaybook(pb) {
   document.getElementById("f-name").value = pb.name || "";
   document.getElementById("f-scenario").value = pb.scenario || "";
@@ -1124,6 +1292,10 @@ function fillFormFromPlaybook(pb) {
   document.getElementById("f-sev").value = pb.sev || "medium";
   document.getElementById("f-detection").value = pb.detection || "";
   document.getElementById("f-primary-query").value = pb.primaryQuery || pb.splunk || "";
+  // Show/populate tactic selector if this is a Technique playbook
+  onCatChange(pb.cat || "");
+  const tacticSel = document.getElementById("f-tactic");
+  if (tacticSel && pb.tactic) tacticSel.value = pb.tactic || "";
 
   state.mitreTags = [...pb.mitre];
   renderMitreTags();
@@ -1157,7 +1329,7 @@ function collectFormPayload() {
     throw new Error("Please complete title, scenario, and category.");
   }
 
-  return {
+  const payload = {
     name,
     scenario,
     cat,
@@ -1174,6 +1346,45 @@ function collectFormPayload() {
       recovery: readStepRows("rec-steps")
     }
   };
+
+  // Preserve tactic metadata when saving a Techniques playbook
+  if (cat === "Techniques") {
+    const tacticSel = document.getElementById("f-tactic");
+    const tacticSlug = (tacticSel && tacticSel.value) || "";
+    if (tacticSlug) {
+      // Map slug → label and TA ID
+      const TACTIC_META = {
+        "reconnaissance": { label: "Reconnaissance", id: "TA0043" },
+        "resource-development": { label: "Resource Development", id: "TA0042" },
+        "initial-access": { label: "Initial Access", id: "TA0001" },
+        "execution": { label: "Execution", id: "TA0002" },
+        "persistence": { label: "Persistence", id: "TA0003" },
+        "privilege-escalation": { label: "Privilege Escalation", id: "TA0004" },
+        "defense-evasion": { label: "Defense Evasion", id: "TA0005" },
+        "credential-access": { label: "Credential Access", id: "TA0006" },
+        "discovery": { label: "Discovery", id: "TA0007" },
+        "lateral-movement": { label: "Lateral Movement", id: "TA0008" },
+        "collection": { label: "Collection", id: "TA0009" },
+        "command-and-control": { label: "Command and Control", id: "TA0011" },
+        "exfiltration": { label: "Exfiltration", id: "TA0010" },
+        "impact": { label: "Impact", id: "TA0040" },
+      };
+      const meta = TACTIC_META[tacticSlug] || {};
+      payload.tactic = tacticSlug;
+      payload.tacticLabel = meta.label || tacticSlug;
+      payload.tacticId = meta.id || "";
+    } else if (state.editingId) {
+      // Carry over tactic from original playbook when editing
+      const orig = state.allPlaybooks.find(p => p.id === state.editingId);
+      if (orig && orig.tactic) {
+        payload.tactic = orig.tactic;
+        payload.tacticLabel = orig.tacticLabel || "";
+        payload.tacticId = orig.tacticId || "";
+      }
+    }
+  }
+
+  return payload;
 }
 
 async function savePlaybook() {
@@ -1332,8 +1543,8 @@ async function init() {
     await loadToolConfig();
     await loadMitreTechniques();
     await loadManifest();
-    await loadLibraryDetails();
-    await refreshData();
+    initLibraryStubs();    // instant — no HTTP, builds stubs from manifest
+    await refreshData();  // loads custom overrides + builds merged state
 
     const savedCardView = localStorage.getItem("pb-card-view");
     if (savedCardView === "table") {
@@ -1370,13 +1581,25 @@ async function init() {
     window.addEventListener("resize", () => {
       if (!isMobileViewport()) closeMobileNav();
     });
+
+    // Hide the loading overlay once all data is loaded
+    const loadingOverlay = document.getElementById("loading-overlay");
+    if (loadingOverlay) {
+      loadingOverlay.classList.add("hidden");
+    }
   } catch (err) {
     console.error(err);
     alert("Failed to initialize playbooks. Check manifest/data files and CGI endpoints.");
+    // Hide loading overlay on error as well
+    const loadingOverlay = document.getElementById("loading-overlay");
+    if (loadingOverlay) {
+      loadingOverlay.classList.add("hidden");
+    }
   }
 }
 
 window.toggleGroup = toggleGroup;
+window.onCatChange = onCatChange;
 window.showPanel = showPanel;
 window.searchNav = searchNav;
 window.filterCards = filterCards;
@@ -1509,7 +1732,7 @@ function renderWizardStep() {
 
 function wizardStepContent() {
   const d = wizardData;
-  const cats = ["Malware","Insider Threat","Cloud","Identity","Application","Network","Supply Chain","Data","Other"];
+  const cats = ["Malware","Insider Threat","Cloud","Identity","Application","Network","Supply Chain","Data","Other","Techniques","Threat Groups"];
   const sevs = [["critical","Critical"],["high","High"],["medium","Medium"],["low","Low"]];
 
   switch (wizardStep) {

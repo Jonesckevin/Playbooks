@@ -14,7 +14,11 @@
   "cat": "Identity",
   "source": "library",
   "updated": "2026-05-17",
-  "related": ["pb03", "pb11", "pb38"],
+  "related": [
+    "pb03",
+    "pb11",
+    "pb38"
+  ],
   "detSteps": [
     {
       "title": "Detect MFA fatigue — excessive push denials followed by approval",
@@ -26,7 +30,10 @@
         "sigma": "title: MFA Fatigue — Excessive Push Denials Then Approval\nstatus: experimental\ndescription: Detects MFA bombing where repeated denials are followed by a successful MFA approval\nlogsource:\n  product: azure\n  service: signinlogs\ndetection:\n  selection_deny:\n    ResultType|contains: 'MFA denied'\n  selection_approve:\n    ResultType: 0\n    AuthenticationRequirement: 'multiFactorAuthentication'\n  condition: selection_deny and selection_approve\nfalsepositives:\n  - Users accidentally denying then approving their own MFA request\nlevel: high",
         "velociraptor": null,
         "carbon_black": null,
-        "sysmon": null
+        "sysmon": null,
+        "security_onion": "# Security Onion KQL — MFA Bypass / SIM Swap Attack (step 1)\n# BEC / phishing email indicators\n# Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n# Office application spawning shell (phishing payload)\nevent.code:1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n# Suricata phishing signature\nevent.dataset:suricata.eve AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")",
+        "osquery": "-- OSQuery: MFA Bypass / SIM Swap Attack (step 1)\n-- Email client processes and suspicious child processes\nSELECT p.pid, p.name, p.cmdline, pp.name AS parent\nFROM processes p LEFT JOIN processes pp ON p.parent = pp.pid\nWHERE pp.name IN ('outlook.exe','thunderbird.exe','teams.exe')\n  AND p.name IN ('powershell.exe','cmd.exe','wscript.exe','mshta.exe');\n\n-- Current authenticated user sessions\nSELECT * FROM logged_in_users;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — MFA Bypass / SIM Swap Attack (step 1)\n// BEC / phishing email indicators\n// Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n// Office application spawning shell (phishing payload)\nevent.code: 1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n// Suricata phishing signature\nevent.dataset: \"suricata.eve\" AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")"
       }
     },
     {
@@ -39,7 +46,10 @@
         "sigma": "title: Impossible Travel After Successful Authentication\nstatus: experimental\ndescription: Detects user authenticating successfully from two geographically distant locations within a short time window\nlogsource:\n  product: azure\n  service: signinlogs\ndetection:\n  selection:\n    ResultType: 0\n  condition: selection\nfalsepositives:\n  - VPN usage\n  - Shared accounts\nlevel: medium",
         "velociraptor": null,
         "carbon_black": null,
-        "sysmon": null
+        "sysmon": null,
+        "security_onion": "# Security Onion KQL — MFA Bypass / SIM Swap Attack (step 2)\n# BEC / phishing email indicators\n# Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n# Office application spawning shell (phishing payload)\nevent.code:1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n# Suricata phishing signature\nevent.dataset:suricata.eve AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")",
+        "osquery": "-- OSQuery: MFA Bypass / SIM Swap Attack (step 2)\n-- Email client processes and suspicious child processes\nSELECT p.pid, p.name, p.cmdline, pp.name AS parent\nFROM processes p LEFT JOIN processes pp ON p.parent = pp.pid\nWHERE pp.name IN ('outlook.exe','thunderbird.exe','teams.exe')\n  AND p.name IN ('powershell.exe','cmd.exe','wscript.exe','mshta.exe');\n\n-- Current authenticated user sessions\nSELECT * FROM logged_in_users;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — MFA Bypass / SIM Swap Attack (step 2)\n// BEC / phishing email indicators\n// Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n// Office application spawning shell (phishing payload)\nevent.code: 1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n// Suricata phishing signature\nevent.dataset: \"suricata.eve\" AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")"
       }
     },
     {
@@ -52,7 +62,10 @@
         "sigma": "title: Session Token Theft via AiTM Phishing Kit\nstatus: experimental\ndescription: Detects sign-in with session tokens that lack MFA claims despite MFA policy requirements — indicative of AiTM session hijacking\nlogsource:\n  product: azure\n  service: signinlogs\ndetection:\n  selection:\n    ResultType: 0\n    AuthenticationRequirement: 'multiFactorAuthentication'\n    RiskLevelDuringSignIn:\n      - 'high'\n      - 'medium'\n  condition: selection\nfalsepositives:\n  - Risky sign-ins from legitimate users in new locations\nlevel: high",
         "velociraptor": null,
         "carbon_black": null,
-        "sysmon": null
+        "sysmon": null,
+        "security_onion": "# Security Onion KQL — MFA Bypass / SIM Swap Attack (step 3)\n# BEC / phishing email indicators\n# Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n# Office application spawning shell (phishing payload)\nevent.code:1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n# Suricata phishing signature\nevent.dataset:suricata.eve AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")",
+        "osquery": "-- OSQuery: MFA Bypass / SIM Swap Attack (step 3)\n-- Email client processes and suspicious child processes\nSELECT p.pid, p.name, p.cmdline, pp.name AS parent\nFROM processes p LEFT JOIN processes pp ON p.parent = pp.pid\nWHERE pp.name IN ('outlook.exe','thunderbird.exe','teams.exe')\n  AND p.name IN ('powershell.exe','cmd.exe','wscript.exe','mshta.exe');\n\n-- Current authenticated user sessions\nSELECT * FROM logged_in_users;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — MFA Bypass / SIM Swap Attack (step 3)\n// BEC / phishing email indicators\n// Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n// Office application spawning shell (phishing payload)\nevent.code: 1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n// Suricata phishing signature\nevent.dataset: \"suricata.eve\" AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")"
       }
     },
     {
@@ -65,7 +78,10 @@
         "sigma": "title: MFA Method Changed — Potential SIM Swap\nstatus: experimental\ndescription: Detects changes to user MFA phone number or authentication method which may indicate SIM swap or account takeover\nlogsource:\n  product: azure\n  service: auditlogs\ndetection:\n  selection:\n    OperationName|contains:\n      - 'security info'\n      - 'StrongAuthentication'\n      - 'phone'\n  condition: selection\nfalsepositives:\n  - Legitimate user updating their MFA device\nlevel: high",
         "velociraptor": null,
         "carbon_black": null,
-        "sysmon": null
+        "sysmon": null,
+        "security_onion": "# Security Onion KQL — MFA Bypass / SIM Swap Attack (step 4)\n# BEC / phishing email indicators\n# Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n# Office application spawning shell (phishing payload)\nevent.code:1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n# Suricata phishing signature\nevent.dataset:suricata.eve AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")",
+        "osquery": "-- OSQuery: MFA Bypass / SIM Swap Attack (step 4)\n-- Email client processes and suspicious child processes\nSELECT p.pid, p.name, p.cmdline, pp.name AS parent\nFROM processes p LEFT JOIN processes pp ON p.parent = pp.pid\nWHERE pp.name IN ('outlook.exe','thunderbird.exe','teams.exe')\n  AND p.name IN ('powershell.exe','cmd.exe','wscript.exe','mshta.exe');\n\n-- Current authenticated user sessions\nSELECT * FROM logged_in_users;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — MFA Bypass / SIM Swap Attack (step 4)\n// BEC / phishing email indicators\n// Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n// Office application spawning shell (phishing payload)\nevent.code: 1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n// Suricata phishing signature\nevent.dataset: \"suricata.eve\" AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")"
       }
     }
   ],
@@ -167,9 +183,21 @@
     }
   ],
   "metrics": [
-    { "name": "Session Revocation SLA", "target": "<5 minutes from confirmation" },
-    { "name": "Password Reset SLA", "target": "<15 minutes via out-of-band channel" },
-    { "name": "Attacker Action Audit", "target": "Complete within 2 hours of containment" },
-    { "name": "Phishing-Resistant MFA Deployment", "target": "All privileged accounts within 48 hours" }
+    {
+      "name": "Session Revocation SLA",
+      "target": "<5 minutes from confirmation"
+    },
+    {
+      "name": "Password Reset SLA",
+      "target": "<15 minutes via out-of-band channel"
+    },
+    {
+      "name": "Attacker Action Audit",
+      "target": "Complete within 2 hours of containment"
+    },
+    {
+      "name": "Phishing-Resistant MFA Deployment",
+      "target": "All privileged accounts within 48 hours"
+    }
   ]
 }

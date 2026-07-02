@@ -4,7 +4,7 @@ services:
     image: soc-playbooks:latest
     container_name: soc-playbooks
     ports:
-      - "8080:8080"
+      - "9020:8080"
     restart: unless-stopped
     volumes:
       # Previous Docker named volume (kept for reference):
@@ -26,7 +26,7 @@ services:
       - "com.soc.description=SOC IR Playbook Library"
       - "com.soc.version=4.0"
 
-# Previous Docker named volume definition (disabled):
+# Docker named volume definition (disabled):
 # volumes:
 #   playbook-data:
 #     driver: local

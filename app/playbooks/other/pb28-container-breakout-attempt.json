@@ -21,10 +21,13 @@
         "splunk": "index=container sourcetype=falco rule IN (\"Container Drift Detected\",\"Write below root\",\"Mkdir binary dirs\") | table _time, container_id, rule, cmdline | sort _time",
         "kql": null,
         "qradar": null,
-        "sigma": null,
+        "sigma": "title: Container Breakout Attempt Detection\nid: 268df039-4e98-5e64-8303-32c4f7d0cb9b\nstatus: experimental\ndescription: Detects suspicious activity associated with Container Breakout Attempt.\ntags:\n    - attack.unknown\nlogsource:\n    category: process_creation\n    product: windows\ndetection:\n    selection:\n        Image|endswith:\n            - '\\\\powershell.exe'\n            - '\\\\cmd.exe'\n        CommandLine|contains:\n            - '-enc'\n            - 'DownloadString'\n            - 'IEX'\n    condition: selection\nfalsepositives:\n    - Legitimate administrative scripts\ndate: 2026-07-01\nlevel: medium",
         "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
         "carbon_black": "(process_name:powershell.exe OR process_name:cmd.exe OR process_name:wmic.exe OR process_name:rundll32.exe OR process_name:regsvr32.exe) AND (cmdline:*whoami* OR cmdline:*net user* OR cmdline:*localgroup* OR cmdline:*administrators*)",
-        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>"
+        "sysmon": "<ProcessAccess onmatch=\"include\"><TargetImage condition=\"end with\">lsass.exe</TargetImage><GrantedAccess condition=\"contains any\">0x1fffff;0x1010</GrantedAccess></ProcessAccess>",
+        "security_onion": "# Security Onion KQL — Container Breakout Attempt (step 1)\n# Container breakout / privileged container\n# Container process spawning host processes\nevent.code:1 AND process.name:(nsenter OR chroot OR unshare)\n\n# Kubernetes API anomalies\nevent.dataset:(kubernetes.audit OR docker.*)\n  AND event.outcome:failure\n\n# Suricata container anomaly\nevent.dataset:suricata.eve AND event.kind:alert\n  AND suricata.alert.signature:*container*",
+        "osquery": "-- OSQuery: Container Breakout Attempt (step 1)\n-- Docker containers running on this host\nSELECT id, image, status, state FROM docker_containers;\n\n-- Container processes that may have escaped\nSELECT pid, name, path, cmdline FROM processes\nWHERE name IN ('nsenter','chroot','unshare','runc','containerd');",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — Container Breakout Attempt (step 1)\n// Container breakout / privileged container\n// Container process spawning host processes\nevent.code: 1 AND process.name:(nsenter OR chroot OR unshare)\n\n// Kubernetes API anomalies\nevent.dataset:(kubernetes.audit OR docker.*)\n  AND event.outcome:failure\n\n// Suricata container anomaly\nevent.dataset: \"suricata.eve\" AND event.kind:alert\n  AND suricata.alert.signature:*container*"
       }
     },
     {
@@ -34,10 +37,13 @@
         "splunk": "index=container sourcetype=k8s_audit verb IN (exec,create) namespace=[suspect_namespace] | table _time, user, resource, verb, response_status | sort _time",
         "kql": null,
         "qradar": null,
-        "sigma": null,
+        "sigma": "title: Container Breakout Attempt Detection\nid: 77d54d6b-46ee-5ed8-8d11-ee591cf1e0cd\nstatus: experimental\ndescription: Detects suspicious activity associated with Container Breakout Attempt.\ntags:\n    - attack.unknown\nlogsource:\n    category: process_creation\n    product: windows\ndetection:\n    selection:\n        Image|endswith:\n            - '\\\\powershell.exe'\n            - '\\\\cmd.exe'\n        CommandLine|contains:\n            - '-enc'\n            - 'DownloadString'\n            - 'IEX'\n    condition: selection\nfalsepositives:\n    - Legitimate administrative scripts\ndate: 2026-07-01\nlevel: medium",
         "velociraptor": "SELECT Pid, Name, CommandLine, Exe, CreateTime FROM pslist() ORDER BY CreateTime DESC LIMIT 150",
         "carbon_black": "(process_name:powershell.exe OR process_name:cmd.exe OR process_name:wmic.exe OR process_name:rundll32.exe OR process_name:regsvr32.exe) AND (cmdline:*whoami* OR cmdline:*net user* OR cmdline:*localgroup* OR cmdline:*administrators*)",
-        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>"
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe</Image></ProcessCreate>",
+        "security_onion": "# Security Onion KQL — Container Breakout Attempt (step 2)\n# Container breakout / privileged container\n# Container process spawning host processes\nevent.code:1 AND process.name:(nsenter OR chroot OR unshare)\n\n# Kubernetes API anomalies\nevent.dataset:(kubernetes.audit OR docker.*)\n  AND event.outcome:failure\n\n# Suricata container anomaly\nevent.dataset:suricata.eve AND event.kind:alert\n  AND suricata.alert.signature:*container*",
+        "osquery": "-- OSQuery: Container Breakout Attempt (step 2)\n-- Docker containers running on this host\nSELECT id, image, status, state FROM docker_containers;\n\n-- Container processes that may have escaped\nSELECT pid, name, path, cmdline FROM processes\nWHERE name IN ('nsenter','chroot','unshare','runc','containerd');",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — Container Breakout Attempt (step 2)\n// Container breakout / privileged container\n// Container process spawning host processes\nevent.code: 1 AND process.name:(nsenter OR chroot OR unshare)\n\n// Kubernetes API anomalies\nevent.dataset:(kubernetes.audit OR docker.*)\n  AND event.outcome:failure\n\n// Suricata container anomaly\nevent.dataset: \"suricata.eve\" AND event.kind:alert\n  AND suricata.alert.signature:*container*"
       }
     }
   ],

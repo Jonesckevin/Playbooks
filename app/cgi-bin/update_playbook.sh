@@ -6,14 +6,22 @@
 
 PLAYBOOKS_DIR="/playbooks"
 OVERRIDE_DIR="${PLAYBOOKS_DIR}/library-overrides"
+. "/var/www/localhost/cgi-bin/_log.sh"
 
-echo "Content-Type: application/json"
-echo "Access-Control-Allow-Origin: *"
-echo ""
+# Function to send a JSON error response
+send_error() {
+    HTTP_STATUS=$1
+    ERROR_MESSAGE=$2
+    echo "Status: $HTTP_STATUS"
+    echo "Content-Type: application/json"
+    echo "Access-Control-Allow-Origin: *"
+    echo ""
+    echo "{\"ok\": false, \"error\": \"$ERROR_MESSAGE\"}"
+    exit 0
+}
 
 if [ "$REQUEST_METHOD" != "POST" ]; then
-    echo '{"error":"Method not allowed"}'
-    exit 0
+    send_error 405 "Method not allowed"
 fi
 
 BODY=""
@@ -22,16 +30,14 @@ if [ -n "$CONTENT_LENGTH" ] && [ "$CONTENT_LENGTH" -gt 0 ]; then
 fi
 
 if [ -z "$BODY" ]; then
-    echo '{"error":"Empty body"}'
-    exit 0
+    send_error 400 "Empty body"
 fi
 
 ID=$(echo "$BODY" | grep -o '"id":"[^"]*"' | head -1 | sed 's/"id":"//;s/"//')
 ID=$(echo "$ID" | tr -cd 'a-zA-Z0-9._-')
 
 if [ -z "$ID" ]; then
-    echo '{"error":"Missing required field: id"}'
-    exit 0
+    send_error 400 "Missing required field: id"
 fi
 
 mkdir -p "$PLAYBOOKS_DIR"
@@ -47,10 +53,22 @@ if [ -f "$CUSTOM_TARGET" ]; then
     SOURCE="custom"
 fi
 
-echo "$BODY" > "$TARGET"
+TMP_FILE="${TARGET}.tmp"
+echo "$BODY" > "$TMP_FILE"
 if [ $? -ne 0 ]; then
-    echo '{"error":"Failed to update playbook"}'
-    exit 0
+    log_event "error" "playbook_update" "$ID" "temp_write_failed target=${TARGET}"
+    send_error 500 "Failed to write temporary update file"
 fi
 
+mv "$TMP_FILE" "$TARGET"
+if [ $? -ne 0 ]; then
+    rm -f "$TMP_FILE"
+    log_event "error" "playbook_update" "$ID" "finalize_failed target=${TARGET}"
+    send_error 500 "Failed to finalize playbook update"
+fi
+
+log_event "info" "playbook_update" "$ID" "source=${SOURCE} target=${TARGET}"
+echo "Content-Type: application/json"
+echo "Access-Control-Allow-Origin: *"
+echo ""
 echo "{\"ok\":true,\"id\":\"${ID}\",\"source\":\"${SOURCE}\"}"

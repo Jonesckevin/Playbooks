@@ -15,8 +15,8 @@ RUN npm run build -- --configuration production --base-href /attack-navigator/ -
 
 FROM alpine:3.19
 
-# ── Install Apache only — no Python, no extras ────────────────────────────
-RUN apk add --no-cache apache2
+# ── Install Apache and jq for JSON validation — no Python, no extras ───────
+RUN apk add --no-cache apache2 jq
 
 # ── Enable mod_cgi ────────────────────────────────────────────────────────
 RUN sed -i 's/#LoadModule cgi_module/LoadModule cgi_module/' /etc/apache2/httpd.conf
@@ -24,7 +24,8 @@ RUN sed -i 's/#LoadModule cgi_module/LoadModule cgi_module/' /etc/apache2/httpd.
 # ── Listen on 8080, set server name, disable directory listing ────────────
 RUN sed -i 's/^Listen 80$/Listen 8080/'                            /etc/apache2/httpd.conf && \
     sed -i 's/#ServerName www.example.com:80/ServerName localhost/' /etc/apache2/httpd.conf && \
-    sed -i 's/Options Indexes FollowSymLinks/Options FollowSymLinks/' /etc/apache2/httpd.conf
+    sed -i 's/Options Indexes FollowSymLinks/Options FollowSymLinks/' /etc/apache2/httpd.conf && \
+    sed -i 's|/run/apache2/httpd.pid|/tmp/httpd.pid|g' /etc/apache2/httpd.conf /etc/apache2/conf.d/*.conf
 
 # ── CGI directory config ──────────────────────────────────────────────────
 RUN echo '<Directory "/var/www/localhost/cgi-bin">'              >> /etc/apache2/conf.d/cgi.conf && \
@@ -38,35 +39,36 @@ RUN echo '<Directory "/var/www/localhost/cgi-bin">'              >> /etc/apache2
 
 # ── Logs → stdout/stderr so docker logs works ─────────────────────────────
 RUN rm -rf /var/www/localhost/htdocs/* && \
-    ln -sf /proc/self/fd/1 /var/log/apache2/access.log && \
-    ln -sf /proc/self/fd/2 /var/log/apache2/error.log
+    mkdir -p /var/www/logs && \
+    sed -i 's|logs/error.log|/proc/self/fd/2|g; s|logs/access.log|/proc/self/fd/1|g' /etc/apache2/httpd.conf /etc/apache2/conf.d/*.conf && \
+    ln -sf /proc/self/fd/1 /var/www/logs/access.log && \
+    ln -sf /proc/self/fd/2 /var/www/logs/error.log
 
 # ── Copy app ──────────────────────────────────────────────────────────────
-COPY app/index.html                 /var/www/localhost/htdocs/index.html
-COPY app/style.css                  /var/www/localhost/htdocs/style.css
-COPY app/app.js                     /var/www/localhost/htdocs/app.js
-COPY app/logo.svg                   /var/www/localhost/htdocs/logo.svg
-COPY app/logo.svg                   /var/www/localhost/htdocs/favicon.ico
-COPY app/playbooks/                  /var/www/localhost/htdocs/playbooks/
+COPY app/index.html app/style.css app/app.js app/logo.svg /var/www/localhost/htdocs/
+RUN ln -sf /var/www/localhost/htdocs/logo.svg /var/www/localhost/htdocs/favicon.ico
+COPY app/playbooks/  /var/www/localhost/htdocs/playbooks/
 COPY --from=mitre-builder /build/mitre-techniques.json /var/www/localhost/htdocs/playbooks/mitre-techniques.json
 COPY --from=navigator-builder /build/attack-navigator/nav-app/dist/browser/ /var/www/localhost/htdocs/attack-navigator/
-COPY app/cgi-bin/save_playbook.sh   /var/www/localhost/cgi-bin/save_playbook.sh
-COPY app/cgi-bin/load_playbooks.sh  /var/www/localhost/cgi-bin/load_playbooks.sh
-COPY app/cgi-bin/update_playbook.sh /var/www/localhost/cgi-bin/update_playbook.sh
-COPY app/cgi-bin/delete_playbook.sh /var/www/localhost/cgi-bin/delete_playbook.sh
-COPY app/cgi-bin/get_config.sh      /var/www/localhost/cgi-bin/get_config.sh
-COPY app/cgi-bin/load_incident_state.sh   /var/www/localhost/cgi-bin/load_incident_state.sh
-COPY app/cgi-bin/save_incident_state.sh   /var/www/localhost/cgi-bin/save_incident_state.sh
-COPY app/cgi-bin/delete_incident_state.sh /var/www/localhost/cgi-bin/delete_incident_state.sh
+COPY app/cgi-bin/*.sh /var/www/localhost/cgi-bin/
 
 RUN sed -i 's/\r$//' /var/www/localhost/cgi-bin/*.sh && \
     chmod +x /var/www/localhost/cgi-bin/*.sh
 
+# ── Create non-root user and group ────────────────────────────────────────
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 # ── Persistent playbook storage — Docker named volume mounted at /playbooks
-RUN mkdir -p /playbooks && chown apache:apache /playbooks
+RUN mkdir -p /playbooks && chown appuser:appgroup /playbooks
+RUN chown -R appuser:appgroup /var/www/localhost
+
+USER appuser
 
 VOLUME ["/playbooks"]
 
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD ["/var/www/localhost/cgi-bin/healthcheck.sh"]
 
 CMD ["httpd", "-D", "FOREGROUND"]

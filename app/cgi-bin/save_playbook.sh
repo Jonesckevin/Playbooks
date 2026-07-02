@@ -4,16 +4,23 @@
 # writes it to /playbooks/<uuid>.json on the Docker volume.
 
 PLAYBOOKS_DIR="/playbooks"
+. "/var/www/localhost/cgi-bin/_log.sh"
 
-# ── CGI headers ────────────────────────────────────────────────────────────
-echo "Content-Type: application/json"
-echo "Access-Control-Allow-Origin: *"
-echo ""
+# Function to send a JSON error response
+send_error() {
+    HTTP_STATUS=$1
+    ERROR_MESSAGE=$2
+    echo "Status: $HTTP_STATUS"
+    echo "Content-Type: application/json"
+    echo "Access-Control-Allow-Origin: *"
+    echo ""
+    echo "{\"ok\": false, \"error\": \"$ERROR_MESSAGE\"}"
+    exit 0
+}
 
 # Only accept POST
 if [ "$REQUEST_METHOD" != "POST" ]; then
-    echo '{"error":"Method not allowed"}'
-    exit 0
+    send_error 405 "Method not allowed"
 fi
 
 # Read the POST body (Content-Length bytes)
@@ -23,15 +30,13 @@ if [ -n "$CONTENT_LENGTH" ] && [ "$CONTENT_LENGTH" -gt 0 ]; then
 fi
 
 if [ -z "$BODY" ]; then
-    echo '{"error":"Empty body"}'
-    exit 0
+    send_error 400 "Empty body"
 fi
 
 # Basic validation - check 'name' field is present and non-empty
 NAME=$(echo "$BODY" | grep -o '"name":"[^"]*"' | head -1 | sed 's/"name":"//;s/"//')
 if [ -z "$NAME" ]; then
-    echo '{"error":"Missing required field: name"}'
-    exit 0
+    send_error 400 "Missing required field: name"
 fi
 
 # Generate a unique ID using timestamp + random
@@ -52,11 +57,24 @@ CREATED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 BODY_STRIPPED=$(echo "$BODY" | sed 's/}[[:space:]]*$//')
 FINAL="${BODY_STRIPPED},\"id\":\"${UUID}\",\"num\":${NUM},\"createdAt\":\"${CREATED}\",\"source\":\"custom\"}"
 
-# Write to volume
-echo "$FINAL" > "${PLAYBOOKS_DIR}/${UUID}.json"
+# Write to temp file first, then move for atomicity
+TMP_FILE="${PLAYBOOKS_DIR}/${UUID}.tmp"
+echo "$FINAL" > "$TMP_FILE"
 
 if [ $? -eq 0 ]; then
-    echo "{\"ok\":true,\"id\":\"${UUID}\",\"num\":${NUM}}"
+    mv "$TMP_FILE" "${PLAYBOOKS_DIR}/${UUID}.json"
+    if [ $? -eq 0 ]; then
+        log_event "info" "playbook_save" "$UUID" "created num=${NUM} source=custom"
+        echo "Content-Type: application/json"
+        echo "Access-Control-Allow-Origin: *"
+        echo ""
+        echo "{\"ok\":true,\"id\":\"${UUID}\",\"num\":${NUM}}"
+    else
+        rm -f "$TMP_FILE"
+        log_event "error" "playbook_save" "$UUID" "finalize_failed"
+        send_error 500 "Failed to finalize playbook file"
+    fi
 else
-    echo '{"error":"Failed to write playbook file"}'
+    log_event "error" "playbook_save" "$UUID" "temp_write_failed"
+    send_error 500 "Failed to write temporary playbook file"
 fi

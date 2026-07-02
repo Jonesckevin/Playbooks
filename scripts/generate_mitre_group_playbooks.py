@@ -324,7 +324,7 @@ def build_playbook(group: dict, techniques: list[dict], num: int) -> dict:
     return {
         "id": f"apt-{group_id.lower()}",
         "num": num,
-        "name": f"MITRE ATT&CK Group — {group_name}",
+        "name": f"Group — {group_name}",
         "fullName": f"{group_name} ({group_id}) Threat Group Hunt",
         "type": "Threat Group / APT Hunt",
         "severity": "Critical",

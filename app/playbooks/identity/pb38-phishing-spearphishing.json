@@ -14,7 +14,11 @@
   "cat": "Identity",
   "source": "library",
   "updated": "2026-05-17",
-  "related": ["pb08", "pb20", "pb42"],
+  "related": [
+    "pb08",
+    "pb20",
+    "pb42"
+  ],
   "detSteps": [
     {
       "title": "Identify the malicious email and scope of delivery",
@@ -26,7 +30,10 @@
         "sigma": "title: Phishing Email Delivery Detection\nstatus: experimental\ndescription: Detects delivery of emails with suspicious attachments or links from external senders\nlogsource:\n  category: email\ndetection:\n  selection:\n    action:\n      - 'delivered'\n      - 'allow'\n  suspicious_indicators:\n    attachment_type|contains:\n      - '.exe'\n      - '.js'\n      - '.hta'\n      - '.iso'\n      - '.lnk'\n  condition: selection and suspicious_indicators\nfalsepositives:\n  - Legitimate software deliveries\nlevel: medium",
         "velociraptor": "SELECT * FROM foreach(\n  row=users(),\n  query={\n    SELECT FullPath, Size, Mtime, hash(path=FullPath) as Hash\n    FROM glob(globs=['%APPDATA%/Local/Temp/*.{exe,js,hta,lnk,iso}',\n                     'C:/Users/*/Downloads/*.{exe,js,hta,lnk,iso}',\n                     'C:/Users/*/AppData/Local/Temp/*'])\n    WHERE Mtime > now() - 86400\n    LIMIT 200\n  }\n)",
         "carbon_black": "filemod_name:*.{exe,js,hta,lnk,iso} AND (process_name:outlook.exe OR process_name:thunderbird.exe OR process_name:chrome.exe OR process_name:msedge.exe) AND filemod_type:CREATE",
-        "sysmon": "<FileCreate onmatch=\"include\"><Image condition=\"contains any\">OUTLOOK.EXE;thunderbird.exe;chrome.exe;msedge.exe;firefox.exe</Image><TargetFilename condition=\"contains any\">.exe;.js;.hta;.lnk;.iso;.vbs;.wsf;.ps1</TargetFilename></FileCreate>"
+        "sysmon": "<FileCreate onmatch=\"include\"><Image condition=\"contains any\">OUTLOOK.EXE;thunderbird.exe;chrome.exe;msedge.exe;firefox.exe</Image><TargetFilename condition=\"contains any\">.exe;.js;.hta;.lnk;.iso;.vbs;.wsf;.ps1</TargetFilename></FileCreate>",
+        "security_onion": "# Security Onion KQL — Phishing / Spearphishing Attack (step 1)\n# Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n# Shadow copy deletion\nevent.code:1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n# Ransom note file creation\nevent.module:sysmon AND event.code:11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n# Lateral SMB propagation\nevent.dataset:zeek.conn AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)",
+        "osquery": "-- OSQuery: Phishing / Spearphishing Attack (step 1)\n-- Check for high file-write processes (ransomware encryption activity)\nSELECT pid, name, path, cmdline FROM processes\nWHERE name IN ('vssadmin.exe','bcdedit.exe','wbadmin.exe','diskpart.exe')\n   OR cmdline LIKE '%delete shadow%' OR cmdline LIKE '%norecoveryenabled%';\n\n-- Find ransom note / encrypted file artifacts (last 1 hour)\nSELECT path, size, mtime FROM file\nWHERE (filename LIKE '%.locked' OR filename LIKE '%.encrypted' OR filename LIKE '%.crypt'\n       OR filename LIKE '%README%' OR filename LIKE '%DECRYPT%')\n  AND mtime > (strftime('%s','now') - 3600);\n\n-- VSS shadow copy status\nSELECT * FROM shadow_copies WHERE volume IS NOT NULL;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — Phishing / Spearphishing Attack (step 1)\n// Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n// Shadow copy deletion\nevent.code: 1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n// Ransom note file creation\nevent.module:sysmon AND event.code: 11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n// Lateral SMB propagation\nevent.dataset: \"zeek.conn\" AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)"
       }
     },
     {
@@ -39,7 +46,10 @@
         "sigma": "title: Phishing URL Click via Web Proxy\nstatus: experimental\ndescription: Detects user clicking a known phishing or suspicious URL through web proxy\nlogsource:\n  category: proxy\ndetection:\n  selection:\n    c-uri-query|contains:\n      - 'credential'\n      - 'verify'\n      - 'secure-login'\n  filter_legit:\n    cs-host|contains:\n      - 'microsoft.com'\n      - 'google.com'\n  condition: selection and not filter_legit\nfalsepositives:\n  - Legitimate password portals\nlevel: medium",
         "velociraptor": "SELECT FullPath, Size, Mtime, hash(path=FullPath) as Hash\nFROM glob(globs=['C:/Users/*/Downloads/*', 'C:/Users/*/AppData/Local/Temp/*'])\nWHERE Mtime > now() - 7200\nORDER BY Mtime DESC\nLIMIT 500",
         "carbon_black": "(process_name:chrome.exe OR process_name:msedge.exe OR process_name:firefox.exe) AND netconn_domain:<phishing_domain>",
-        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">chrome.exe;msedge.exe;firefox.exe;iexplore.exe</Image><DestinationPort condition=\"is any\">80;443</DestinationPort></NetworkConnect>"
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">chrome.exe;msedge.exe;firefox.exe;iexplore.exe</Image><DestinationPort condition=\"is any\">80;443</DestinationPort></NetworkConnect>",
+        "security_onion": "# Security Onion KQL — Phishing / Spearphishing Attack (step 2)\n# Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n# Shadow copy deletion\nevent.code:1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n# Ransom note file creation\nevent.module:sysmon AND event.code:11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n# Lateral SMB propagation\nevent.dataset:zeek.conn AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)",
+        "osquery": "-- OSQuery: Phishing / Spearphishing Attack (step 2)\n-- Check for high file-write processes (ransomware encryption activity)\nSELECT pid, name, path, cmdline FROM processes\nWHERE name IN ('vssadmin.exe','bcdedit.exe','wbadmin.exe','diskpart.exe')\n   OR cmdline LIKE '%delete shadow%' OR cmdline LIKE '%norecoveryenabled%';\n\n-- Find ransom note / encrypted file artifacts (last 1 hour)\nSELECT path, size, mtime FROM file\nWHERE (filename LIKE '%.locked' OR filename LIKE '%.encrypted' OR filename LIKE '%.crypt'\n       OR filename LIKE '%README%' OR filename LIKE '%DECRYPT%')\n  AND mtime > (strftime('%s','now') - 3600);\n\n-- VSS shadow copy status\nSELECT * FROM shadow_copies WHERE volume IS NOT NULL;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — Phishing / Spearphishing Attack (step 2)\n// Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n// Shadow copy deletion\nevent.code: 1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n// Ransom note file creation\nevent.module:sysmon AND event.code: 11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n// Lateral SMB propagation\nevent.dataset: \"zeek.conn\" AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)"
       }
     },
     {
@@ -52,7 +62,10 @@
         "sigma": "title: Suspicious Inbox Rule Created After Phishing\nstatus: experimental\ndescription: Detects new inbox forwarding rules created shortly after a phishing indicator\nlogsource:\n  product: microsoft365\n  service: exchange\ndetection:\n  selection:\n    eventSource: Exchange\n    eventName:\n      - 'New-InboxRule'\n      - 'UpdateInboxRules'\n      - 'Set-Mailbox'\n  condition: selection\nfalsepositives:\n  - Legitimate inbox management\nlevel: high",
         "velociraptor": "SELECT * FROM foreach(\n  row=Artifact.Windows.Registry.NTUser(userFilter='.*'),\n  query={\n    SELECT Key, Value, Mtime\n    FROM read_reg_key(glob='HKCU/SOFTWARE/Microsoft/Office/*/Outlook/WebView/Inbox/*')\n    WHERE Mtime > now() - 86400\n  }\n)",
         "carbon_black": "(process_name:outlook.exe OR process_name:chrome.exe) AND cmdline:\"new-inboxrule\" OR cmdline:\"forward\"",
-        "sysmon": "<ProcessCreate onmatch=\"include\"><ParentImage condition=\"end with\">OUTLOOK.EXE</ParentImage><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;mshta.exe</Image></ProcessCreate>"
+        "sysmon": "<ProcessCreate onmatch=\"include\"><ParentImage condition=\"end with\">OUTLOOK.EXE</ParentImage><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;mshta.exe</Image></ProcessCreate>",
+        "security_onion": "# Security Onion KQL — Phishing / Spearphishing Attack (step 3)\n# BEC / phishing email indicators\n# Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n# Office application spawning shell (phishing payload)\nevent.code:1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n# Suricata phishing signature\nevent.dataset:suricata.eve AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")",
+        "osquery": "-- OSQuery: Phishing / Spearphishing Attack (step 3)\n-- Email client processes and suspicious child processes\nSELECT p.pid, p.name, p.cmdline, pp.name AS parent\nFROM processes p LEFT JOIN processes pp ON p.parent = pp.pid\nWHERE pp.name IN ('outlook.exe','thunderbird.exe','teams.exe')\n  AND p.name IN ('powershell.exe','cmd.exe','wscript.exe','mshta.exe');\n\n-- Current authenticated user sessions\nSELECT * FROM logged_in_users;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — Phishing / Spearphishing Attack (step 3)\n// BEC / phishing email indicators\n// Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n// Office application spawning shell (phishing payload)\nevent.code: 1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n// Suricata phishing signature\nevent.dataset: \"suricata.eve\" AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")"
       }
     },
     {
@@ -65,7 +78,10 @@
         "sigma": "title: Office Application Spawning Suspicious Child Process\nstatus: stable\ndescription: Detects Microsoft Office applications spawning shell or script interpreters — common phishing payload execution\nlogsource:\n  category: process_creation\n  product: windows\ndetection:\n  selection_parent:\n    ParentImage|endswith:\n      - '\\WINWORD.EXE'\n      - '\\EXCEL.EXE'\n      - '\\POWERPNT.EXE'\n      - '\\outlook.exe'\n  selection_child:\n    Image|endswith:\n      - '\\powershell.exe'\n      - '\\cmd.exe'\n      - '\\wscript.exe'\n      - '\\cscript.exe'\n      - '\\mshta.exe'\n      - '\\rundll32.exe'\n  condition: selection_parent and selection_child\nfalsepositives:\n  - Macros used for legitimate automation\nlevel: high",
         "velociraptor": "SELECT Pid, Name, CommandLine, Ppid, CreateTime\nFROM pslist()\nWHERE Ppid IN (\n  SELECT Pid FROM pslist()\n  WHERE Name =~ '(?i)(WINWORD|EXCEL|POWERPNT|outlook|msedge|chrome)'\n)\nAND Name =~ '(?i)(powershell|cmd|wscript|cscript|mshta|rundll32|regsvr32)'\nORDER BY CreateTime DESC",
         "carbon_black": "parent_name:(WINWORD.EXE EXCEL.EXE POWERPNT.EXE outlook.exe) AND (process_name:powershell.exe OR process_name:cmd.exe OR process_name:wscript.exe OR process_name:cscript.exe OR process_name:mshta.exe)",
-        "sysmon": "<ProcessCreate onmatch=\"include\"><ParentImage condition=\"contains any\">WINWORD.EXE;EXCEL.EXE;POWERPNT.EXE;OUTLOOK.EXE</ParentImage><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe;mshta.exe;rundll32.exe;regsvr32.exe</Image></ProcessCreate>"
+        "sysmon": "<ProcessCreate onmatch=\"include\"><ParentImage condition=\"contains any\">WINWORD.EXE;EXCEL.EXE;POWERPNT.EXE;OUTLOOK.EXE</ParentImage><Image condition=\"contains any\">powershell.exe;cmd.exe;wscript.exe;cscript.exe;mshta.exe;rundll32.exe;regsvr32.exe</Image></ProcessCreate>",
+        "security_onion": "# Security Onion KQL — Phishing / Spearphishing Attack (step 4)\n# BEC / phishing email indicators\n# Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n# Office application spawning shell (phishing payload)\nevent.code:1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n# Suricata phishing signature\nevent.dataset:suricata.eve AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")",
+        "osquery": "-- OSQuery: Phishing / Spearphishing Attack (step 4)\n-- Email client processes and suspicious child processes\nSELECT p.pid, p.name, p.cmdline, pp.name AS parent\nFROM processes p LEFT JOIN processes pp ON p.parent = pp.pid\nWHERE pp.name IN ('outlook.exe','thunderbird.exe','teams.exe')\n  AND p.name IN ('powershell.exe','cmd.exe','wscript.exe','mshta.exe');\n\n-- Current authenticated user sessions\nSELECT * FROM logged_in_users;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — Phishing / Spearphishing Attack (step 4)\n// BEC / phishing email indicators\n// Mailbox rule creation (forwarding — requires O365/EWS log ingest)\nevent.action:(\"Add-MailboxPermission\" OR \"New-InboxRule\" OR \"Set-InboxRule\")\n  AND (winlog.event_data.Parameters:*ForwardTo* OR winlog.event_data.Parameters:*DeliverToMailbox*)\n\n// Office application spawning shell (phishing payload)\nevent.code: 1\n  AND process.parent.name:(winword.exe OR excel.exe OR powerpnt.exe OR outlook.exe)\n  AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR mshta.exe)\n\n// Suricata phishing signature\nevent.dataset: \"suricata.eve\" AND event.kind:alert\n  AND (suricata.alert.signature:*phish* OR suricata.alert.category:\"Attempted User Privilege Gain\")"
       }
     }
   ],
@@ -167,9 +183,21 @@
     }
   ],
   "metrics": [
-    { "name": "Time to Retract", "target": "<30 minutes from initial detection" },
-    { "name": "Credential Reset SLA", "target": "<60 minutes if credential harvesting confirmed" },
-    { "name": "Endpoint Isolation SLA", "target": "<15 minutes if payload executed" },
-    { "name": "User Notification", "target": "<2 hours from confirmation" }
+    {
+      "name": "Time to Retract",
+      "target": "<30 minutes from initial detection"
+    },
+    {
+      "name": "Credential Reset SLA",
+      "target": "<60 minutes if credential harvesting confirmed"
+    },
+    {
+      "name": "Endpoint Isolation SLA",
+      "target": "<15 minutes if payload executed"
+    },
+    {
+      "name": "User Notification",
+      "target": "<2 hours from confirmation"
+    }
   ]
 }

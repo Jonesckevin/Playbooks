@@ -5,14 +5,22 @@
 
 PLAYBOOKS_DIR="/playbooks"
 OVERRIDE_DIR="${PLAYBOOKS_DIR}/library-overrides"
+. "/var/www/localhost/cgi-bin/_log.sh"
 
-echo "Content-Type: application/json"
-echo "Access-Control-Allow-Origin: *"
-echo ""
+# Function to send a JSON error response
+send_error() {
+    HTTP_STATUS=$1
+    ERROR_MESSAGE=$2
+    echo "Status: $HTTP_STATUS"
+    echo "Content-Type: application/json"
+    echo "Access-Control-Allow-Origin: *"
+    echo ""
+    echo "{\"ok\": false, \"error\": \"$ERROR_MESSAGE\"}"
+    exit 0
+}
 
 if [ "$REQUEST_METHOD" != "DELETE" ] && [ "$REQUEST_METHOD" != "POST" ]; then
-    echo '{"error":"Method not allowed"}'
-    exit 0
+    send_error 405 "Method not allowed"
 fi
 
 # Parse id from query string or POST body
@@ -27,8 +35,7 @@ fi
 ID=$(echo "$ID" | tr -cd 'a-zA-Z0-9._-')
 
 if [ -z "$ID" ]; then
-    echo '{"error":"Missing id parameter"}'
-    exit 0
+    send_error 400 "Missing id parameter"
 fi
 
 TARGET_CUSTOM="${PLAYBOOKS_DIR}/${ID}.json"
@@ -37,9 +44,14 @@ TARGET_OVERRIDE="${OVERRIDE_DIR}/${ID}.json"
 if [ -f "$TARGET_CUSTOM" ]; then
     rm "$TARGET_CUSTOM"
     if [ $? -eq 0 ]; then
+        log_event "info" "playbook_delete" "$ID" "source=custom"
+        echo "Content-Type: application/json"
+        echo "Access-Control-Allow-Origin: *"
+        echo ""
         echo "{\"ok\":true,\"deleted\":\"${ID}\",\"source\":\"custom\"}"
     else
-        echo '{"error":"Failed to delete custom playbook"}'
+        log_event "error" "playbook_delete" "$ID" "delete_failed source=custom"
+        send_error 500 "Failed to delete custom playbook"
     fi
     exit 0
 fi
@@ -47,12 +59,18 @@ fi
 if [ -f "$TARGET_OVERRIDE" ]; then
     rm "$TARGET_OVERRIDE"
     if [ $? -eq 0 ]; then
+        log_event "info" "playbook_delete" "$ID" "source=library-override reverted=true"
+        echo "Content-Type: application/json"
+        echo "Access-Control-Allow-Origin: *"
+        echo ""
         echo "{\"ok\":true,\"deleted\":\"${ID}\",\"source\":\"library-override\",\"reverted\":true}"
     else
-        echo '{"error":"Failed to remove library override"}'
+        log_event "error" "playbook_delete" "$ID" "delete_failed source=library-override"
+        send_error 500 "Failed to remove library override"
     fi
     exit 0
 fi
 
-echo '{"error":"Playbook not found"}'
-exit 0
+log_event "warn" "playbook_delete" "$ID" "not_found"
+send_error 404 "Playbook not found"
+

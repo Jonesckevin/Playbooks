@@ -14,7 +14,11 @@
   "cat": "Identity",
   "source": "library",
   "updated": "2026-05-17",
-  "related": ["pb09", "pb14", "pb20"],
+  "related": [
+    "pb09",
+    "pb14",
+    "pb20"
+  ],
   "detSteps": [
     {
       "title": "Detect Kerberoasting — excessive TGS-REQ with RC4 encryption",
@@ -26,7 +30,10 @@
         "sigma": "title: Kerberoasting via RC4 Downgrade\nstatus: stable\ndescription: Detects Kerberoasting — multiple TGS requests with RC4 encryption targeting service accounts\nlogsource:\n  product: windows\n  service: security\ndetection:\n  selection:\n    EventID: 4769\n    TicketEncryptionType: '0x17'\n  filter_machine_accounts:\n    ServiceName|endswith: '$'\n  filter_krbtgt:\n    ServiceName: 'krbtgt'\n  condition: selection and not filter_machine_accounts and not filter_krbtgt\nfalsepositives:\n  - Legacy systems that only support RC4\nlevel: high",
         "velociraptor": "SELECT EventID, TimeGenerated, Computer, AccountName, ServiceName, TicketEncryptionType, ClientAddress\nFROM wmi(query=\"SELECT * FROM Win32_NTLogEvent WHERE Logfile='Security' AND EventCode=4769\")\nWHERE TicketEncryptionType = '0x17'\nAND NOT ServiceName =~ '.*\\\\$'\nAND ServiceName != 'krbtgt'\nORDER BY TimeGenerated DESC\nLIMIT 200",
         "carbon_black": "(process_name:Rubeus.exe OR process_name:GetUserSPNs.exe OR cmdline:\"kerberoast\") OR (process_name:powershell.exe AND cmdline:\"Get-DomainSPNTicket\")",
-        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">kerberoast;Get-DomainSPNTicket;Invoke-Kerberoast;GetUserSPNs</CommandLine></ProcessCreate>"
+        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">kerberoast;Get-DomainSPNTicket;Invoke-Kerberoast;GetUserSPNs</CommandLine></ProcessCreate>",
+        "security_onion": "# Security Onion KQL — Active Directory / Kerberos Attacks (step 1)\n# Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n# Shadow copy deletion\nevent.code:1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n# Ransom note file creation\nevent.module:sysmon AND event.code:11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n# Lateral SMB propagation\nevent.dataset:zeek.conn AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)",
+        "osquery": "-- OSQuery: Active Directory / Kerberos Attacks (step 1)\n-- Check for high file-write processes (ransomware encryption activity)\nSELECT pid, name, path, cmdline FROM processes\nWHERE name IN ('vssadmin.exe','bcdedit.exe','wbadmin.exe','diskpart.exe')\n   OR cmdline LIKE '%delete shadow%' OR cmdline LIKE '%norecoveryenabled%';\n\n-- Find ransom note / encrypted file artifacts (last 1 hour)\nSELECT path, size, mtime FROM file\nWHERE (filename LIKE '%.locked' OR filename LIKE '%.encrypted' OR filename LIKE '%.crypt'\n       OR filename LIKE '%README%' OR filename LIKE '%DECRYPT%')\n  AND mtime > (strftime('%s','now') - 3600);\n\n-- VSS shadow copy status\nSELECT * FROM shadow_copies WHERE volume IS NOT NULL;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — Active Directory / Kerberos Attacks (step 1)\n// Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n// Shadow copy deletion\nevent.code: 1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n// Ransom note file creation\nevent.module:sysmon AND event.code: 11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n// Lateral SMB propagation\nevent.dataset: \"zeek.conn\" AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)"
       }
     },
     {
@@ -39,7 +46,10 @@
         "sigma": "title: AS-REP Roasting — Pre-Authentication Disabled\nstatus: stable\ndescription: Detects AS-REP requests against accounts with Kerberos pre-authentication disabled\nlogsource:\n  product: windows\n  service: security\ndetection:\n  selection:\n    EventID: 4768\n    PreAuthType: '0'\n  condition: selection\nfalsepositives:\n  - Service accounts explicitly configured without pre-auth\nlevel: high",
         "velociraptor": "SELECT EventID, TimeGenerated, Computer, TargetUserName, PreAuthType, ClientAddress\nFROM wmi(query=\"SELECT * FROM Win32_NTLogEvent WHERE Logfile='Security' AND EventCode=4768\")\nWHERE PreAuthType = '0'\nORDER BY TimeGenerated DESC\nLIMIT 200",
         "carbon_black": "(process_name:Rubeus.exe AND cmdline:\"asreproast\") OR (process_name:powershell.exe AND cmdline:\"Get-ASREPHash\")",
-        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">asreproast;Get-ASREPHash;Invoke-ASREPRoasting</CommandLine></ProcessCreate>"
+        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">asreproast;Get-ASREPHash;Invoke-ASREPRoasting</CommandLine></ProcessCreate>",
+        "security_onion": "# Security Onion KQL — Active Directory / Kerberos Attacks (step 2)\n# Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n# Shadow copy deletion\nevent.code:1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n# Ransom note file creation\nevent.module:sysmon AND event.code:11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n# Lateral SMB propagation\nevent.dataset:zeek.conn AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)",
+        "osquery": "-- OSQuery: Active Directory / Kerberos Attacks (step 2)\n-- Check for high file-write processes (ransomware encryption activity)\nSELECT pid, name, path, cmdline FROM processes\nWHERE name IN ('vssadmin.exe','bcdedit.exe','wbadmin.exe','diskpart.exe')\n   OR cmdline LIKE '%delete shadow%' OR cmdline LIKE '%norecoveryenabled%';\n\n-- Find ransom note / encrypted file artifacts (last 1 hour)\nSELECT path, size, mtime FROM file\nWHERE (filename LIKE '%.locked' OR filename LIKE '%.encrypted' OR filename LIKE '%.crypt'\n       OR filename LIKE '%README%' OR filename LIKE '%DECRYPT%')\n  AND mtime > (strftime('%s','now') - 3600);\n\n-- VSS shadow copy status\nSELECT * FROM shadow_copies WHERE volume IS NOT NULL;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — Active Directory / Kerberos Attacks (step 2)\n// Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n// Shadow copy deletion\nevent.code: 1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n// Ransom note file creation\nevent.module:sysmon AND event.code: 11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n// Lateral SMB propagation\nevent.dataset: \"zeek.conn\" AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)"
       }
     },
     {
@@ -52,7 +62,10 @@
         "sigma": "title: Golden Ticket — Abnormal Kerberos TGT Usage\nstatus: experimental\ndescription: Detects potential Golden Ticket usage via anomalous Kerberos TGT characteristics\nlogsource:\n  product: windows\n  service: security\ndetection:\n  selection:\n    EventID: 4769\n    TicketOptions: '0x40810010'\n  condition: selection\nfalsepositives:\n  - Legitimate administrative Kerberos operations\nlevel: critical",
         "velociraptor": "SELECT Name, Pid, Username, CreateTime\nFROM pslist()\nWHERE Name =~ '(?i)(mimikatz|sekurlsa|kerberos)'\nORDER BY CreateTime DESC",
         "carbon_black": "(process_name:mimikatz.exe OR cmdline:\"kerberos::golden\" OR cmdline:\"kerberos::silver\" OR cmdline:\"sekurlsa::tickets\")",
-        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">kerberos::golden;kerberos::silver;sekurlsa::tickets;Pass-the-Ticket</CommandLine></ProcessCreate>"
+        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">kerberos::golden;kerberos::silver;sekurlsa::tickets;Pass-the-Ticket</CommandLine></ProcessCreate>",
+        "security_onion": "# Security Onion KQL — Active Directory / Kerberos Attacks (step 3)\n# Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n# Shadow copy deletion\nevent.code:1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n# Ransom note file creation\nevent.module:sysmon AND event.code:11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n# Lateral SMB propagation\nevent.dataset:zeek.conn AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)",
+        "osquery": "-- OSQuery: Active Directory / Kerberos Attacks (step 3)\n-- Check for high file-write processes (ransomware encryption activity)\nSELECT pid, name, path, cmdline FROM processes\nWHERE name IN ('vssadmin.exe','bcdedit.exe','wbadmin.exe','diskpart.exe')\n   OR cmdline LIKE '%delete shadow%' OR cmdline LIKE '%norecoveryenabled%';\n\n-- Find ransom note / encrypted file artifacts (last 1 hour)\nSELECT path, size, mtime FROM file\nWHERE (filename LIKE '%.locked' OR filename LIKE '%.encrypted' OR filename LIKE '%.crypt'\n       OR filename LIKE '%README%' OR filename LIKE '%DECRYPT%')\n  AND mtime > (strftime('%s','now') - 3600);\n\n-- VSS shadow copy status\nSELECT * FROM shadow_copies WHERE volume IS NOT NULL;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — Active Directory / Kerberos Attacks (step 3)\n// Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n// Shadow copy deletion\nevent.code: 1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n// Ransom note file creation\nevent.module:sysmon AND event.code: 11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n// Lateral SMB propagation\nevent.dataset: \"zeek.conn\" AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)"
       }
     },
     {
@@ -65,7 +78,10 @@
         "sigma": "title: DCSync via Replication Rights Abuse\nstatus: stable\ndescription: Detects DCSync attack using replication privileges from a non-domain-controller\nlogsource:\n  product: windows\n  service: security\ndetection:\n  selection:\n    EventID: 4662\n    AccessMask: '0x100'\n    ObjectType|contains: '19195a5b-6da0-11d0-afd3-00c04fd930c9'\n  filter_dc:\n    SubjectUserName|endswith: '$'\n  condition: selection and not filter_dc\nfalsepositives:\n  - Legitimate AD replication tools run by domain admins\nlevel: critical",
         "velociraptor": "SELECT Name, Pid, CommandLine, Username, CreateTime\nFROM pslist()\nWHERE CommandLine =~ '(?i)(lsadump::dcsync|dcsync|drsuapi)'\nORDER BY CreateTime DESC",
         "carbon_black": "cmdline:\"lsadump::dcsync\" OR (process_name:mimikatz.exe AND cmdline:\"dcsync\")",
-        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">lsadump::dcsync;drsuapi;NTDSUtil;ntds.dit</CommandLine></ProcessCreate>"
+        "sysmon": "<ProcessCreate onmatch=\"include\"><CommandLine condition=\"contains any\">lsadump::dcsync;drsuapi;NTDSUtil;ntds.dit</CommandLine></ProcessCreate>",
+        "security_onion": "# Security Onion KQL — Active Directory / Kerberos Attacks (step 4)\n# Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n# Shadow copy deletion\nevent.code:1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n# Ransom note file creation\nevent.module:sysmon AND event.code:11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n# Lateral SMB propagation\nevent.dataset:zeek.conn AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)",
+        "osquery": "-- OSQuery: Active Directory / Kerberos Attacks (step 4)\n-- Check for high file-write processes (ransomware encryption activity)\nSELECT pid, name, path, cmdline FROM processes\nWHERE name IN ('vssadmin.exe','bcdedit.exe','wbadmin.exe','diskpart.exe')\n   OR cmdline LIKE '%delete shadow%' OR cmdline LIKE '%norecoveryenabled%';\n\n-- Find ransom note / encrypted file artifacts (last 1 hour)\nSELECT path, size, mtime FROM file\nWHERE (filename LIKE '%.locked' OR filename LIKE '%.encrypted' OR filename LIKE '%.crypt'\n       OR filename LIKE '%README%' OR filename LIKE '%DECRYPT%')\n  AND mtime > (strftime('%s','now') - 3600);\n\n-- VSS shadow copy status\nSELECT * FROM shadow_copies WHERE volume IS NOT NULL;",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — Active Directory / Kerberos Attacks (step 4)\n// Ransomware precursors: VSS deletion, rapid file modification, ransom notes\n// Shadow copy deletion\nevent.code: 1 AND (process.name:vssadmin.exe AND process.command_line:*delete*)\nOR (process.name:bcdedit.exe AND process.command_line:*norecoveryenabled*)\nOR (process.name:wbadmin.exe AND process.command_line:*delete*)\n\n// Ransom note file creation\nevent.module:sysmon AND event.code: 11\n  AND (file.name:*README* OR file.name:*DECRYPT* OR file.name:*RECOVER*\n       OR file.name:*.locked OR file.name:*.encrypted OR file.name:*.crypt)\n\n// Lateral SMB propagation\nevent.dataset: \"zeek.conn\" AND destination.port:445\n  AND NOT (source.ip:10.0.0.0/8 OR source.ip:172.16.0.0/12 OR source.ip:192.168.0.0/16)"
       }
     }
   ],
@@ -167,9 +183,21 @@
     }
   ],
   "metrics": [
-    { "name": "Detection Time", "target": "<15 minutes from first RC4 TGS request" },
-    { "name": "Account Isolation SLA", "target": "<10 minutes from detection" },
-    { "name": "krbtgt Reset", "target": "Within 1 hour if Golden Ticket confirmed" },
-    { "name": "Full Domain Recovery", "target": "<8 hours" }
+    {
+      "name": "Detection Time",
+      "target": "<15 minutes from first RC4 TGS request"
+    },
+    {
+      "name": "Account Isolation SLA",
+      "target": "<10 minutes from detection"
+    },
+    {
+      "name": "krbtgt Reset",
+      "target": "Within 1 hour if Golden Ticket confirmed"
+    },
+    {
+      "name": "Full Domain Recovery",
+      "target": "<8 hours"
+    }
   ]
 }

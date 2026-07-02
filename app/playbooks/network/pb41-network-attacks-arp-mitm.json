@@ -14,7 +14,11 @@
   "cat": "Network",
   "source": "library",
   "updated": "2026-05-17",
-  "related": ["pb14", "pb17", "pb07"],
+  "related": [
+    "pb14",
+    "pb17",
+    "pb07"
+  ],
   "detSteps": [
     {
       "title": "Detect ARP spoofing — duplicate or conflicting ARP responses",
@@ -26,7 +30,10 @@
         "sigma": "title: ARP Spoofing — Duplicate MAC for IP\nstatus: experimental\ndescription: Detects ARP spoofing by identifying multiple MAC addresses claiming the same IP address\nlogsource:\n  category: network\n  product: zeek\ndetection:\n  selection:\n    event_type: 'arp'\n  condition: selection\nfalsepositives:\n  - NIC teaming or failover configurations\n  - VM migration events\nlevel: high",
         "velociraptor": "SELECT * FROM execve(argv=['arp', '-a'])\nUNION ALL\nSELECT HardwareAddress, IPAddress, Type FROM interfaces()",
         "carbon_black": "netconn_count:[100 TO *] AND NOT (process_name:svchost.exe OR process_name:System)",
-        "sysmon": "<NetworkConnect onmatch=\"include\"><DestinationPort condition=\"is any\">21;22;23;25;53;80;110;139;143;389;443;445;3389;8080;8443</DestinationPort></NetworkConnect>"
+        "sysmon": "<NetworkConnect onmatch=\"include\"><DestinationPort condition=\"is any\">21;22;23;25;53;80;110;139;143;389;443;445;3389;8080;8443</DestinationPort></NetworkConnect>",
+        "security_onion": "# Security Onion KQL — ARP Spoofing / MITM / Port Scanning (step 1)\n# Network attack detection\n# Zeek conn: unusual traffic patterns\nevent.dataset:zeek.conn AND network.bytes:>1000000\n  AND NOT (destination.ip:10.0.0.0/8 OR destination.ip:172.16.0.0/12)\n\n# ARP anomalies / MITM indicators\nevent.dataset:zeek.arp\n\n# Suricata network attack signatures\nevent.dataset:suricata.eve AND event.kind:alert\n  AND suricata.alert.category:(\"Attempted Administrator Privilege Gain\" OR \"Potential Corporate Privacy Violation\")\n\n# SMB lateral movement\nevent.dataset:zeek.conn AND destination.port:445",
+        "osquery": "-- OSQuery: ARP Spoofing / MITM / Port Scanning (step 1)\n-- Generic process and connection inventory\nSELECT pid, name, path, cmdline FROM processes\nWHERE name IN ('powershell.exe','cmd.exe','wscript.exe','cscript.exe','mshta.exe')\n   OR (cmdline LIKE '%-enc%' OR cmdline LIKE '%base64%' OR cmdline LIKE '%DownloadString%');\n\nSELECT p.pid, p.name, s.remote_address, s.remote_port FROM processes p\nJOIN process_open_sockets s ON p.pid = s.pid\nWHERE s.state = 'ESTABLISHED' AND s.remote_address NOT IN ('127.0.0.1','::1');",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — ARP Spoofing / MITM / Port Scanning (step 1)\n// Network attack detection\n// Zeek conn: unusual traffic patterns\nevent.dataset: \"zeek.conn\" AND network.bytes:>1000000\n  AND NOT (destination.ip:10.0.0.0/8 OR destination.ip:172.16.0.0/12)\n\n// ARP anomalies / MITM indicators\nevent.dataset:zeek.arp\n\n// Suricata network attack signatures\nevent.dataset: \"suricata.eve\" AND event.kind:alert\n  AND suricata.alert.category:(\"Attempted Administrator Privilege Gain\" OR \"Potential Corporate Privacy Violation\")\n\n// SMB lateral movement\nevent.dataset: \"zeek.conn\" AND destination.port:445"
       }
     },
     {
@@ -39,7 +46,10 @@
         "sigma": "title: Internal Port Scan Detected\nstatus: experimental\ndescription: Detects internal host scanning many ports or hosts — common reconnaissance pattern before lateral movement\nlogsource:\n  category: firewall\ndetection:\n  selection:\n    dst_port|gt: 0\n  condition: selection\nfalsepositives:\n  - Vulnerability scanners (Nessus, Qualys)\n  - Asset inventory tools\nlevel: medium",
         "velociraptor": "SELECT Laddr, Lport, Raddr, Rport, State, Pid, Name\nFROM netstat()\nWHERE State = 'SYN_SENT'\nOR (State = 'ESTABLISHED' AND Rport IN (21,22,23,25,53,139,445,3389,8080,8443))\nORDER BY Rport",
         "carbon_black": "netconn_count:[50 TO *] AND NOT (process_name:nessus.exe OR process_name:qualys.exe OR process_name:chrome.exe OR process_name:msedge.exe OR process_name:svchost.exe)",
-        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">nmap;masscan;zmap;scanner</Image></NetworkConnect>"
+        "sysmon": "<NetworkConnect onmatch=\"include\"><Image condition=\"contains any\">nmap;masscan;zmap;scanner</Image></NetworkConnect>",
+        "security_onion": "# Security Onion KQL — ARP Spoofing / MITM / Port Scanning (step 2)\n# Network attack detection\n# Zeek conn: unusual traffic patterns\nevent.dataset:zeek.conn AND network.bytes:>1000000\n  AND NOT (destination.ip:10.0.0.0/8 OR destination.ip:172.16.0.0/12)\n\n# ARP anomalies / MITM indicators\nevent.dataset:zeek.arp\n\n# Suricata network attack signatures\nevent.dataset:suricata.eve AND event.kind:alert\n  AND suricata.alert.category:(\"Attempted Administrator Privilege Gain\" OR \"Potential Corporate Privacy Violation\")\n\n# SMB lateral movement\nevent.dataset:zeek.conn AND destination.port:445",
+        "osquery": "-- OSQuery: ARP Spoofing / MITM / Port Scanning (step 2)\n-- Generic process and connection inventory\nSELECT pid, name, path, cmdline FROM processes\nWHERE name IN ('powershell.exe','cmd.exe','wscript.exe','cscript.exe','mshta.exe')\n   OR (cmdline LIKE '%-enc%' OR cmdline LIKE '%base64%' OR cmdline LIKE '%DownloadString%');\n\nSELECT p.pid, p.name, s.remote_address, s.remote_port FROM processes p\nJOIN process_open_sockets s ON p.pid = s.pid\nWHERE s.state = 'ESTABLISHED' AND s.remote_address NOT IN ('127.0.0.1','::1');",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — ARP Spoofing / MITM / Port Scanning (step 2)\n// Network attack detection\n// Zeek conn: unusual traffic patterns\nevent.dataset: \"zeek.conn\" AND network.bytes:>1000000\n  AND NOT (destination.ip:10.0.0.0/8 OR destination.ip:172.16.0.0/12)\n\n// ARP anomalies / MITM indicators\nevent.dataset:zeek.arp\n\n// Suricata network attack signatures\nevent.dataset: \"suricata.eve\" AND event.kind:alert\n  AND suricata.alert.category:(\"Attempted Administrator Privilege Gain\" OR \"Potential Corporate Privacy Violation\")\n\n// SMB lateral movement\nevent.dataset: \"zeek.conn\" AND destination.port:445"
       }
     },
     {
@@ -52,7 +62,10 @@
         "sigma": "title: SSL Certificate Mismatch via Proxy\nstatus: experimental\ndescription: Detects SSL certificate errors which may indicate MITM interception\nlogsource:\n  category: proxy\ndetection:\n  selection:\n    sc-status:\n      - '407'\n      - '502'\n    cs-uri-scheme: 'https'\n  condition: selection\nfalsepositives:\n  - Misconfigured TLS inspection proxies\nlevel: medium",
         "velociraptor": "SELECT * FROM execve(argv=['ipconfig', '/all'])\nUNION ALL\nSELECT * FROM execve(argv=['route', 'print'])",
         "carbon_black": "netconn_count:[1 TO *] AND (process_name:arpspoof OR process_name:ettercap OR process_name:bettercap OR process_name:mitmf)",
-        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">arpspoof;ettercap;bettercap;mitmf;responder</Image></ProcessCreate>"
+        "sysmon": "<ProcessCreate onmatch=\"include\"><Image condition=\"contains any\">arpspoof;ettercap;bettercap;mitmf;responder</Image></ProcessCreate>",
+        "security_onion": "# Security Onion KQL — ARP Spoofing / MITM / Port Scanning (step 3)\n# Authentication anomalies\n# Failed logins — brute force threshold\nevent.code:4625 AND event.provider:Microsoft-Windows-Security-Auditing\n# Kibana Threshold Alert: count >= 10 per source IP in 60s → brute force\n\n# Successful login after failures (credential stuffing hit)\nevent.code:4624 AND event.provider:Microsoft-Windows-Security-Auditing\n  AND winlog.event_data.LogonType:(3 OR 10)\n\n# Kerberos RC4 downgrade (Kerberoasting)\nevent.code:4769 AND winlog.event_data.TicketEncryptionType:0x17\n  AND NOT winlog.event_data.ServiceName:*$\n\n# Zeek auth logs\nevent.dataset:zeek.kerberos AND zeek.kerberos.success:false",
+        "osquery": "-- OSQuery: ARP Spoofing / MITM / Port Scanning (step 3)\n-- Current user sessions and authentication state\nSELECT * FROM logged_in_users;\n\n-- Failed authentication artifacts (Windows event log via osquery)\nSELECT pid, name, cmdline FROM processes\nWHERE name IN ('lsass.exe','svchost.exe') ORDER BY start_time DESC LIMIT 10;\n\n-- RDP / remote desktop connections\nSELECT pid, name, remote_address, remote_port, state\nFROM process_open_sockets\nWHERE remote_port IN (3389, 5985, 5986) AND state = 'ESTABLISHED';",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — ARP Spoofing / MITM / Port Scanning (step 3)\n// Authentication anomalies\n// Failed logins — brute force threshold\nevent.code: 4625 AND event.provider:Microsoft-Windows-Security-Auditing\n// Kibana Threshold Alert: count >= 10 per source IP in 60s → brute force\n\n// Successful login after failures (credential stuffing hit)\nevent.code: 4624 AND event.provider:Microsoft-Windows-Security-Auditing\n  AND winlog.event_data.LogonType:(3 OR 10)\n\n// Kerberos RC4 downgrade (Kerberoasting)\nevent.code: 4769 AND winlog.event_data.TicketEncryptionType:0x17\n  AND NOT winlog.event_data.ServiceName:*$\n\n// Zeek auth logs\nevent.dataset: \"zeek.kerberos\" AND zeek.kerberos.success:false"
       }
     },
     {
@@ -62,10 +75,13 @@
         "splunk": "index=network sourcetype=dhcp | search ip=[suspect_ip] OR mac=[suspect_mac] | table _time, ip, mac, hostname, lease_duration | sort _time",
         "kql": "CommonSecurityLog\n| where SourceIP == '<suspect_ip>'\n| where TimeGenerated > ago(24h)\n| summarize Events=count(), EventTypes=make_set(DeviceEventClassID) by SourceIP, SourceMACAddress, DeviceVendor\n| order by Events desc",
         "qradar": "SELECT sourceip, \"Source MAC\" as mac, username, QIDNAME(qid) as event, starttime FROM events WHERE sourceip = '<suspect_ip>' ORDER BY starttime DESC LAST 24 HOURS",
-        "sigma": null,
+        "sigma": "title: ARP Spoofing   MITM   Port Scanning — Authentication Failure Burst\nid: ccf41cf4-7179-58f8-b523-400e09302dd6\nstatus: experimental\ndescription: Detects burst of authentication failures — indicator of brute force or credential stuffing.\ntags:\n    - attack.credential-access\n    - attack.t1110\nlogsource:\n    product: windows\n    service: security\ndetection:\n    selection:\n        EventID: 4625\n    condition: selection | count() by winlog.event_data.IpAddress > 10\nfalsepositives:\n    - Misconfigured services\ndate: 2026-07-01\nlevel: medium",
         "velociraptor": "SELECT InterfaceName, HardwareAddress, IPAddress, MTU\nFROM interfaces()\nUNION ALL\nSELECT * FROM execve(argv=['ipconfig', '/all'])",
         "carbon_black": "hostname:<suspect_host> AND netconn_count:[1 TO *]",
-        "sysmon": null
+        "sysmon": null,
+        "security_onion": "# Security Onion KQL — ARP Spoofing / MITM / Port Scanning (step 4)\n# Authentication anomalies\n# Failed logins — brute force threshold\nevent.code:4625 AND event.provider:Microsoft-Windows-Security-Auditing\n# Kibana Threshold Alert: count >= 10 per source IP in 60s → brute force\n\n# Successful login after failures (credential stuffing hit)\nevent.code:4624 AND event.provider:Microsoft-Windows-Security-Auditing\n  AND winlog.event_data.LogonType:(3 OR 10)\n\n# Kerberos RC4 downgrade (Kerberoasting)\nevent.code:4769 AND winlog.event_data.TicketEncryptionType:0x17\n  AND NOT winlog.event_data.ServiceName:*$\n\n# Zeek auth logs\nevent.dataset:zeek.kerberos AND zeek.kerberos.success:false",
+        "osquery": "-- OSQuery: ARP Spoofing / MITM / Port Scanning (step 4)\n-- Current user sessions and authentication state\nSELECT * FROM logged_in_users;\n\n-- Failed authentication artifacts (Windows event log via osquery)\nSELECT pid, name, cmdline FROM processes\nWHERE name IN ('lsass.exe','svchost.exe') ORDER BY start_time DESC LIMIT 10;\n\n-- RDP / remote desktop connections\nSELECT pid, name, remote_address, remote_port, state\nFROM process_open_sockets\nWHERE remote_port IN (3389, 5985, 5986) AND state = 'ESTABLISHED';",
+        "elastic": "// Elastic KQL — mirrors Security Onion query with Elastic-specific adjustments\n// Security Onion KQL — ARP Spoofing / MITM / Port Scanning (step 4)\n// Authentication anomalies\n// Failed logins — brute force threshold\nevent.code: 4625 AND event.provider:Microsoft-Windows-Security-Auditing\n// Kibana Threshold Alert: count >= 10 per source IP in 60s → brute force\n\n// Successful login after failures (credential stuffing hit)\nevent.code: 4624 AND event.provider:Microsoft-Windows-Security-Auditing\n  AND winlog.event_data.LogonType:(3 OR 10)\n\n// Kerberos RC4 downgrade (Kerberoasting)\nevent.code: 4769 AND winlog.event_data.TicketEncryptionType:0x17\n  AND NOT winlog.event_data.ServiceName:*$\n\n// Zeek auth logs\nevent.dataset: \"zeek.kerberos\" AND zeek.kerberos.success:false"
       }
     }
   ],
@@ -141,9 +157,21 @@
     }
   ],
   "metrics": [
-    { "name": "Detection Time", "target": "<5 minutes from ARP anomaly or scan threshold alert" },
-    { "name": "Switch Port Isolation", "target": "<10 minutes from detection" },
-    { "name": "ARP Cache Flush", "target": "<30 minutes across affected VLAN" },
-    { "name": "DAI Deployment", "target": "Within 48 hours of incident" }
+    {
+      "name": "Detection Time",
+      "target": "<5 minutes from ARP anomaly or scan threshold alert"
+    },
+    {
+      "name": "Switch Port Isolation",
+      "target": "<10 minutes from detection"
+    },
+    {
+      "name": "ARP Cache Flush",
+      "target": "<30 minutes across affected VLAN"
+    },
+    {
+      "name": "DAI Deployment",
+      "target": "Within 48 hours of incident"
+    }
   ]
 }

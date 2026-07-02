@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="style.css">
 <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css" disabled>
 <link id="hljs-dark"  rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
 <button class="mobile-nav-toggle" id="mobile-nav-toggle" onclick="toggleMobileNav()" aria-label="Open navigation" aria-expanded="false">☰</button>
@@ -58,6 +59,14 @@
 </div>
 
 <div class="main" id="main-content">
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="loading-container">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Loading playbook library...</div>
+  </div>
+</div>
 
 <!-- HOME -->
 <div class="panel visible" id="panel-home">
@@ -197,7 +206,7 @@
     </div>
     <div class="form-group">
       <label class="form-label">Incident type / category <span>*</span></label>
-      <select class="form-select" id="f-cat">
+      <select class="form-select" id="f-cat" onchange="onCatChange(this.value)">
         <option value="">Select category...</option>
         <option>Malware</option>
         <option>Insider Threat</option>
@@ -208,6 +217,8 @@
         <option>Supply Chain</option>
         <option>Data</option>
         <option>Other</option>
+        <option>Techniques</option>
+        <option>Threat Groups</option>
       </select>
     </div>
     <div class="form-group">
@@ -217,6 +228,27 @@
         <option value="high">High</option>
         <option value="medium">Medium</option>
         <option value="low">Low</option>
+      </select>
+    </div>
+    <!-- Tactic row — shown only when category = Techniques -->
+    <div class="form-group form-full" id="f-tactic-row" style="display:none">
+      <label class="form-label">ATT&amp;CK Tactic</label>
+      <select class="form-select" id="f-tactic">
+        <option value="">-- auto from technique --</option>
+        <option value="reconnaissance">Reconnaissance (TA0043)</option>
+        <option value="resource-development">Resource Development (TA0042)</option>
+        <option value="initial-access">Initial Access (TA0001)</option>
+        <option value="execution">Execution (TA0002)</option>
+        <option value="persistence">Persistence (TA0003)</option>
+        <option value="privilege-escalation">Privilege Escalation (TA0004)</option>
+        <option value="defense-evasion">Defense Evasion (TA0005)</option>
+        <option value="credential-access">Credential Access (TA0006)</option>
+        <option value="discovery">Discovery (TA0007)</option>
+        <option value="lateral-movement">Lateral Movement (TA0008)</option>
+        <option value="collection">Collection (TA0009)</option>
+        <option value="command-and-control">Command and Control (TA0011)</option>
+        <option value="exfiltration">Exfiltration (TA0010)</option>
+        <option value="impact">Impact (TA0040)</option>
       </select>
     </div>
     <div class="form-group form-full">
