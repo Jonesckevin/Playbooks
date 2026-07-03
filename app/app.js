@@ -132,10 +132,10 @@ function computeCompleteness(pb) {
   const tools = state.activeTools;
   const result = {};
   const allSteps = [
-    ...(pb.investigation?.detectionAnalysis || []),
-    ...(pb.investigation?.containment || []),
-    ...(pb.investigation?.eradication || []),
-    ...(pb.investigation?.recovery || [])
+    ...(pb.detSteps || pb.investigation?.detectionAnalysis || []),
+    ...(pb.contSteps || pb.investigation?.containment || []),
+    ...(pb.eradSteps || pb.investigation?.eradication || []),
+    ...(pb.recSteps || pb.investigation?.recovery || [])
   ];
   for (const tool of tools) {
     result[tool] = allSteps.some((s) => hasQueryValue(s?.queries?.[tool]));
