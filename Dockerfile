@@ -47,7 +47,20 @@ RUN rm -rf /var/www/localhost/htdocs/* && \
 # ── Copy app ──────────────────────────────────────────────────────────────
 COPY app/index.html app/style.css app/app.js app/logo.svg /var/www/localhost/htdocs/
 RUN ln -sf /var/www/localhost/htdocs/logo.svg /var/www/localhost/htdocs/favicon.ico
-COPY app/playbooks/  /var/www/localhost/htdocs/playbooks/
+
+# ── Generate queries at build time ────────────────────────────────────────
+# Mirrors the expected directory structure so the script's path resolution works:
+#   /tmp/build/scripts/update_playbook_queries.py  →  parents[1] = /tmp/build
+#   /tmp/build/app/playbooks/                       →  PLAYBOOK_DIR resolved correctly
+COPY scripts/ /tmp/build/scripts/
+COPY app/playbooks/ /tmp/build/app/playbooks/
+RUN python3 /tmp/build/scripts/update_playbook_queries.py
+
+# ── Copy generated playbooks to htdocs ───────────────────────────────────
+RUN mkdir -p /var/www/localhost/htdocs/playbooks && \
+    cp -r /tmp/build/app/playbooks/. /var/www/localhost/htdocs/playbooks/ && \
+    rm -rf /tmp/build
+
 COPY --from=mitre-builder /build/mitre-techniques.json /var/www/localhost/htdocs/playbooks/mitre-techniques.json
 COPY --from=navigator-builder /build/attack-navigator/nav-app/dist/browser/ /var/www/localhost/htdocs/attack-navigator/
 COPY app/cgi-bin/*.sh /var/www/localhost/cgi-bin/
