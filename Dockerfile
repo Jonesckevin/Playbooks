@@ -15,8 +15,8 @@ RUN npm run build -- --configuration production --base-href /attack-navigator/ -
 
 FROM alpine:3.19
 
-# ── Install Apache and jq for JSON validation — no Python, no extras ───────
-RUN apk add --no-cache apache2 jq
+# ── Install Apache, jq, Python, and bash ────────────────────────────────────
+RUN apk add --no-cache apache2 jq python3 bash
 
 # ── Enable mod_cgi ────────────────────────────────────────────────────────
 RUN sed -i 's/#LoadModule cgi_module/LoadModule cgi_module/' /etc/apache2/httpd.conf
