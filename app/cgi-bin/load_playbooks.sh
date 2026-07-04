@@ -2,15 +2,37 @@
 # CGI: load_playbooks.sh
 # Reads all .json files from /var/www/localhost/htdocs/playbooks volume and returns them as a JSON array.
 
+# ── Security: Restrict CORS to allowed origins ────────────────────────
+ORIGIN="${HTTP_ORIGIN:-}"
+
+# Only allow requests from known origins
+if [ -n "$ORIGIN" ]; then
+    case "$ORIGIN" in
+        http://localhost:9020|http://localhost:8080|http://localhost)
+            # Allowed origin
+            ;;
+        *)
+            # Blocked origin - return empty response
+            echo "Content-Type: application/json"
+            echo ""
+            echo '[]'
+            exit 0
+            ;;
+    esac
+fi
+
 PLAYBOOKS_DIR="/var/www/localhost/htdocs/playbooks"
 . "/var/www/localhost/cgi-bin/_log.sh"
 
 echo "Content-Type: application/json"
-echo "Access-Control-Allow-Origin: *"
+# Only echo origin if it's whitelisted
+if [ -n "$ORIGIN" ] && echo "$ALLOWED_ORIGINS" | grep -q "^$ORIGIN$"; then
+    echo "Access-Control-Allow-Origin: $ORIGIN"
+fi
 echo ""
 
-# If no files exist, return empty array
-if [ ! -d "$PLAYBOOKS_DIR" ] || [ -z "$(find "$PLAYBOOKS_DIR" -maxdepth 2 -name '*.json' 2>/dev/null | head -1)" ]; then
+# ── Safety checks ──────────────────────────────────────────────────────
+if [ ! -d "$PLAYBOOKS_DIR" ] || [ ! -r "$PLAYBOOKS_DIR" ]; then
     echo "[]"
     exit 0
 fi

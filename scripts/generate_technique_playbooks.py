@@ -12,11 +12,20 @@ Usage: python scripts/generate_technique_playbooks.py
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
+import urllib.error
 import urllib.request
 from datetime import date
 from pathlib import Path
+
+# ── Setup logging for visibility ──────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 ATTACK_URL = (
     "https://raw.githubusercontent.com/mitre-attack/attack-stix-data"
@@ -95,9 +104,23 @@ def external_ref(obj: dict, prefix: str) -> dict | None:
 # ── Fetch & parse ──────────────────────────────────────────────────────────────
 
 def fetch_stix() -> dict:
-    print(f"Fetching STIX from {ATTACK_URL}...")
-    with urllib.request.urlopen(ATTACK_URL, timeout=120) as response:
-        return json.load(response)
+    """Fetch MITRE STIX bundle with error handling."""
+    try:
+        logger.info(f"Fetching STIX from {ATTACK_URL}...")
+        with urllib.request.urlopen(ATTACK_URL, timeout=120) as response:
+            bundle = json.load(response)
+            logger.info(f"✓ Successfully fetched STIX bundle ({len(bundle.get('objects', []))} objects)")
+            return bundle
+    except urllib.error.URLError as e:
+        logger.error(f"Network error fetching MITRE STIX: {e}")
+        logger.error("Tip: Check internet connectivity or MITRE server status")
+        raise SystemExit(1)
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in MITRE STIX response: {e}")
+        raise SystemExit(1)
+    except Exception as e:
+        logger.error(f"Unexpected error fetching MITRE STIX: {e}")
+        raise SystemExit(1)
 
 
 def parse_techniques(bundle: dict) -> list[dict]:
@@ -237,80 +260,90 @@ def write_mitre_index(techniques: list[dict]) -> None:
 
 
 def main() -> int:
-    bundle = fetch_stix()
-    techniques = parse_techniques(bundle)
-    print(f"Found {len(techniques)} techniques")
+    try:
+        logger.info("Starting MITRE technique playbook generation...")
+        bundle = fetch_stix()
+        techniques = parse_techniques(bundle)
+        logger.info(f"Found {len(techniques)} techniques")
 
-    PLAYBOOK_MAIN.mkdir(parents=True, exist_ok=True)
-    write_mitre_index(techniques)
+        PLAYBOOK_MAIN.mkdir(parents=True, exist_ok=True)
+        write_mitre_index(techniques)
 
-    generated = 0
-    errors = 0
-    manifest_entries: list[dict] = []
+        generated = 0
+        errors = 0
+        manifest_entries: list[dict] = []
 
-    for tech in techniques:
-        try:
-            tid    = tech["id"]
-            tactic = tech["tactics"][0] if tech["tactics"] else "other"
-            tactic_dir = OUT_DIR / tactic
-            tactic_dir.mkdir(parents=True, exist_ok=True)
+        for tech in techniques:
+            try:
+                tid    = tech["id"]
+                tactic = tech["tactics"][0] if tech["tactics"] else "other"
+                tactic_dir = OUT_DIR / tactic
+                tactic_dir.mkdir(parents=True, exist_ok=True)
 
-            name_slug = slugify(tech["name"])
-            filename  = f"tech-{tid.lower()}-{name_slug}.json"
-            out_file  = tactic_dir / filename
+                name_slug = slugify(tech["name"])
+                filename  = f"tech-{tid.lower()}-{name_slug}.json"
+                out_file  = tactic_dir / filename
 
-            pb = build_playbook(tech)
-            out_file.write_text(
-                json.dumps(pb, ensure_ascii=False, indent=2) + "\n",
+                pb = build_playbook(tech)
+                out_file.write_text(
+                    json.dumps(pb, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                generated += 1
+
+                manifest_entries.append({
+                    "id":             f"tech-{tid.lower()}",
+                    "num":            10000 + generated,
+                    "name":           f"{tid} – {clean(tech['name'])}",
+                    "cat":            "Techniques",
+                    "tactic":         tactic,
+                    "tacticId":       TACTIC_IDS.get(tactic, ""),
+                    "tacticLabel":    tactic_label(tactic),
+                    "domain":         "enterprise",
+                    "sev":            "high",
+                    "type":           "Enterprise ATT&CK Technique",
+                    "mitre":          tid,
+                    "isSubtechnique": tech["isSubtechnique"],
+                    "source":         "library",
+                    "file":           f"techniques/{tactic}/{filename}",
+                    "tools":          [],
+                })
+
+                if generated % 100 == 0:
+                    logger.info(f"Generated {generated} playbooks...")
+
+            except Exception as exc:
+                logger.error(f"ERROR {tech.get('id', '?')}: {exc}")
+                errors += 1
+
+        # Merge with existing manifest (preserve non-technique entries)
+        if MANIFEST_PATH.exists():
+            manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+            manifest["playbooks"] = [
+                p for p in manifest.get("playbooks", [])
+                if not str(p.get("id", "")).startswith("tech-")
+            ]
+            manifest["playbooks"].extend(manifest_entries)
+            manifest["generated"] = TODAY
+            MANIFEST_PATH.write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
-            generated += 1
 
-            manifest_entries.append({
-                "id":             f"tech-{tid.lower()}",
-                "num":            10000 + generated,
-                "name":           f"{tid} \u2013 {clean(tech['name'])}",
-                "cat":            "Techniques",
-                "tactic":         tactic,
-                "tacticId":       TACTIC_IDS.get(tactic, ""),
-                "tacticLabel":    tactic_label(tactic),
-                "domain":         "enterprise",
-                "sev":            "high",
-                "type":           "Enterprise ATT&CK Technique",
-                "mitre":          tid,
-                "isSubtechnique": tech["isSubtechnique"],
-                "source":         "library",
-                "file":           f"techniques/{tactic}/{filename}",
-                "tools":          [],
-            })
-
-            if generated % 100 == 0:
-                print(f"  Generated {generated} playbooks...")
-
-        except Exception as exc:
-            print(f"  ERROR {tech.get('id', '?')}: {exc}")
-            errors += 1
-
-    # Merge with existing manifest (preserve non-technique entries)
-    if MANIFEST_PATH.exists():
-        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-        manifest["playbooks"] = [
-            p for p in manifest.get("playbooks", [])
-            if not str(p.get("id", "")).startswith("tech-")
-        ]
-        manifest["playbooks"].extend(manifest_entries)
-        manifest["generated"] = TODAY
-        MANIFEST_PATH.write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-
-    print(f"\n{'─'*50}")
-    print(f"Technique playbooks generated: {generated}")
-    print(f"Errors: {errors}")
-    print(f"Output: {OUT_DIR}")
-    print(f"{'─'*50}")
-    return 0 if errors == 0 else 1
+        logger.info(f"Technique playbooks generated: {generated}")
+        logger.info(f"Errors: {errors}")
+        logger.info(f"Output: {OUT_DIR}")
+        return 0 if errors == 0 else 1
+    
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {e}")
+        return 1
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in manifest: {e}")
+        return 1
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return 2
 
 
 if __name__ == "__main__":

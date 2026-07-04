@@ -9,12 +9,22 @@ intrusion-set/group (Gxxxx), and appends only missing entries to the manifest.
 from __future__ import annotations
 
 import json
+import logging
 import re
+import sys
 import textwrap
+import urllib.error
 import urllib.request
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
+
+# ── Setup logging for visibility ──────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 ATTACK_URL = "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json"
@@ -55,8 +65,23 @@ TACTIC_LABELS = {
 
 
 def fetch_enterprise_attack() -> dict:
-    with urllib.request.urlopen(ATTACK_URL, timeout=120) as response:
-        return json.load(response)
+    """Fetch MITRE Enterprise ATT&CK STIX bundle with error handling."""
+    try:
+        logger.info(f"Fetching MITRE ATT&CK STIX from {ATTACK_URL}...")
+        with urllib.request.urlopen(ATTACK_URL, timeout=120) as response:
+            bundle = json.load(response)
+            logger.info(f"✓ Successfully fetched STIX bundle ({len(bundle.get('objects', []))} objects)")
+            return bundle
+    except urllib.error.URLError as e:
+        logger.error(f"Network error fetching MITRE STIX: {e}")
+        logger.error("Tip: Check internet connectivity or MITRE server status")
+        raise SystemExit(1)
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in MITRE STIX response: {e}")
+        raise SystemExit(1)
+    except Exception as e:
+        logger.error(f"Unexpected error fetching MITRE STIX: {e}")
+        raise SystemExit(1)
 
 
 def slugify(value: str) -> str:
@@ -272,76 +297,83 @@ def build_playbook(group: dict, techniques: list[dict], num: int) -> dict:
 
 
 def main() -> int:
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    existing_ids = {item["id"] for item in manifest.get("playbooks", [])}
-    existing_files = {item["file"] for item in manifest.get("playbooks", [])}
-    max_num = max((int(item.get("num", 0)) for item in manifest.get("playbooks", [])), default=0)
+    """Generate MITRE group playbooks with comprehensive error handling."""
+    try:
+        logger.info("Starting MITRE group playbook generation...")
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        existing_ids = {item["id"] for item in manifest.get("playbooks", [])}
+        existing_files = {item["file"] for item in manifest.get("playbooks", [])}
+        max_num = max((int(item.get("num", 0)) for item in manifest.get("playbooks", [])), default=0)
 
-    bundle = fetch_enterprise_attack()
-    groups, _techniques_by_stix, uses_by_group = build_indexes(bundle)
-    GROUP_DIR.mkdir(parents=True, exist_ok=True)
+        bundle = fetch_enterprise_attack()
+        groups, _techniques_by_stix, uses_by_group = build_indexes(bundle)
+        GROUP_DIR.mkdir(parents=True, exist_ok=True)
 
-    added = 0
-    for group in groups:
-        group_id = group["mitre_id"]
-        playbook_id = f"apt-{group_id.lower()}"
-        rel_file = f"threat-groups/{playbook_id}-{slugify(group.get('name', group_id))}.json"
-        # Skip only when the entry already exists AND the file is present on disk.
-        # Regenerate if the file is missing (e.g. fresh build from committed manifest).
-        file_exists = (PLAYBOOK_ROOT / rel_file).exists()
-        if (playbook_id in existing_ids or rel_file in existing_files) and file_exists:
-            continue
+        added = 0
+        for group in groups:
+            group_id = group["mitre_id"]
+            playbook_id = f"apt-{group_id.lower()}"
+            rel_file = f"threat-groups/{playbook_id}-{slugify(group.get('name', group_id))}.json"
+            # Skip only when the entry already exists AND the file is present on disk.
+            # Regenerate if the file is missing (e.g. fresh build from committed manifest).
+            file_exists = (PLAYBOOK_ROOT / rel_file).exists()
+            if (playbook_id in existing_ids or rel_file in existing_files) and file_exists:
+                continue
 
-        techniques = sorted(
-            uses_by_group.get(group["id"], []),
-            key=lambda tech: (
-                min((tactic_sort_key(t) for t in tech.get("tactics", [])), default=(99, "")),
-                tech["id"],
-            ),
-        )
-        max_num += 1
-        playbook = build_playbook(group, techniques, max_num)
-        (PLAYBOOK_ROOT / rel_file).write_text(
-            json.dumps(playbook, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        new_entry = {
-                "id": playbook_id,
-                "num": max_num,
-                "name": playbook["name"],
-                "cat": "Threat Groups",
-                "sev": "critical",
-                "type": "Threat Group / APT Hunt",
-                "mitre": playbook["mitre"],
-                "source": "library",
-                "file": rel_file,
-                "related": [],
-                "tools": [],
-            }
-        # Upsert: replace existing entry or append new one
-        existing_idx = next(
-            (i for i, p in enumerate(manifest["playbooks"]) if p.get("id") == playbook_id),
-            None,
-        )
-        if existing_idx is not None:
-            manifest["playbooks"][existing_idx] = new_entry
-        else:
-            manifest["playbooks"].append(new_entry)
-        added += 1
+            techniques = sorted(
+                uses_by_group.get(group["id"], []),
+                key=lambda tech: (
+                    min((tactic_sort_key(t) for t in tech.get("tactics", [])), default=(99, "")),
+                    tech["id"],
+                ),
+            )
+            max_num += 1
+            playbook = build_playbook(group, techniques, max_num)
+            (PLAYBOOK_ROOT / rel_file).write_text(
+                json.dumps(playbook, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            new_entry = {
+                    "id": playbook_id,
+                    "num": max_num,
+                    "name": playbook["name"],
+                    "cat": "Threat Groups",
+                    "sev": "critical",
+                    "type": "Threat Group / APT Hunt",
+                    "mitre": playbook["mitre"],
+                    "source": "library",
+                    "file": rel_file,
+                    "related": [],
+                    "tools": [],
+                }
+            # Upsert: replace existing entry or append new one
+            existing_idx = next(
+                (i for i, p in enumerate(manifest["playbooks"]) if p.get("id") == playbook_id),
+                None,
+            )
+            if existing_idx is not None:
+                manifest["playbooks"][existing_idx] = new_entry
+            else:
+                manifest["playbooks"].append(new_entry)
+            added += 1
 
-    manifest["generated"] = date.today().isoformat()
-    MANIFEST_PATH.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        manifest["generated"] = date.today().isoformat()
+        MANIFEST_PATH.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    print(
-        textwrap.dedent(
-            f"""\
-            MITRE Enterprise groups processed: {len(groups)}
-            New default group playbooks added: {added}
-            Manifest total playbooks: {len(manifest['playbooks'])}
-            """
-        ).strip()
-    )
-    return 0
+        logger.info(f"MITRE Enterprise groups processed: {len(groups)}")
+        logger.info(f"New default group playbooks added: {added}")
+        logger.info(f"Manifest total playbooks: {len(manifest['playbooks'])}")
+        return 0
+    
+    except FileNotFoundError as e:
+        logger.error(f"Required file not found: {e}")
+        return 1
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in manifest: {e}")
+        return 1
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return 2
 
 
 if __name__ == "__main__":

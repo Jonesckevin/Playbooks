@@ -9,8 +9,8 @@ RUN npm run build -- --configuration production --base-href /attack-navigator/ -
 
 FROM alpine:3.19
 
-# ── Install Apache, Python, and jq ───────────────────────────────────────
-RUN apk add --no-cache apache2 python3 bash jq
+# ── Install Apache, Python, jq, and wget for healthchecks ──────────────────
+RUN apk add --no-cache apache2 python3 bash jq wget
 
 # ── Enable mod_cgi ────────────────────────────────────────────────────────
 RUN sed -i 's/#LoadModule cgi_module/LoadModule cgi_module/' /etc/apache2/httpd.conf
@@ -29,7 +29,13 @@ RUN echo '<Directory "/var/www/localhost/cgi-bin">'              >> /etc/apache2
     echo '    Require all granted'                                >> /etc/apache2/conf.d/cgi.conf && \
     echo '</Directory>'                                           >> /etc/apache2/conf.d/cgi.conf && \
     echo 'ScriptAlias /cgi-bin/ /var/www/localhost/cgi-bin/'     >> /etc/apache2/conf.d/cgi.conf && \
-    echo 'PassEnv SIEM_TOOL_1 SIEM_TOOL_2 SIEM_TOOL_3 SIEM_TOOL_4 SIEM_TOOL_5 SIEM_TOOL_6' >> /etc/apache2/conf.d/cgi.conf
+    echo 'PassEnv SIEM_TOOL_1 SIEM_TOOL_2 SIEM_TOOL_3 SIEM_TOOL_4 SIEM_TOOL_5 SIEM_TOOL_6' >> /etc/apache2/conf.d/cgi.conf && \
+    echo '' >> /etc/apache2/conf.d/cgi.conf && \
+    echo '# Security headers' >> /etc/apache2/conf.d/cgi.conf && \
+    echo 'Header set X-Content-Type-Options: nosniff' >> /etc/apache2/conf.d/cgi.conf && \
+    echo 'Header set X-Frame-Options: DENY' >> /etc/apache2/conf.d/cgi.conf && \
+    echo 'Header set X-XSS-Protection: "1; mode=block"' >> /etc/apache2/conf.d/cgi.conf && \
+    echo 'Header set Referrer-Policy: strict-origin-when-cross-origin' >> /etc/apache2/conf.d/cgi.conf
 
 # ── Logs → stdout/stderr so docker logs works ─────────────────────────────
 RUN rm -rf /var/www/localhost/htdocs/* && \
@@ -78,6 +84,10 @@ RUN sed -i 's/\r$//' /var/www/localhost/cgi-bin/*.sh && \
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 RUN chown -R appuser:appgroup /var/www/localhost
 
+# ── Environment variables for robustness ──────────────────────────────────
+ENV PYTHONUNBUFFERED=1 \
+    NODE_ENV=production
+
 USER appuser
 
 # Custom-override playbooks are supplied via this volume at runtime.
@@ -85,4 +95,9 @@ USER appuser
 VOLUME ["/var/www/localhost/htdocs/playbooks"]
 
 EXPOSE 8080
+
+# ── Health check ──────────────────────────────────────────────────────────
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:8080/ || exit 1
+
 CMD ["httpd", "-D", "FOREGROUND"]

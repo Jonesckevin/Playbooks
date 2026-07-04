@@ -12,8 +12,16 @@ Usage: python scripts/update_manifest_tools.py
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date
 from pathlib import Path
+
+# ── Setup logging for visibility ──────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[1]
 PLAYBOOK_MAIN = ROOT / "app" / "playbooks-main"
@@ -77,41 +85,54 @@ def extract_tools(pb: dict) -> list[str]:
     return sorted(found)
 
 
-def main() -> None:
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    updated = skipped = missing = 0
+def main() -> int:
+    try:
+        logger.info("Scanning playbooks to update manifest tools...")
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        updated = skipped = missing = 0
 
-    for entry in manifest.get("playbooks", []):
-        rel_file = entry.get("file", "")
-        if not rel_file:
-            skipped += 1
-            continue
+        for entry in manifest.get("playbooks", []):
+            rel_file = entry.get("file", "")
+            if not rel_file:
+                skipped += 1
+                continue
 
-        pb_path = PLAYBOOK_MAIN / rel_file
-        if not pb_path.exists():
-            # File may not exist yet (e.g. reference-only entries)
-            entry["tools"] = entry.get("tools") or []
-            missing += 1
-            continue
+            pb_path = PLAYBOOK_MAIN / rel_file
+            if not pb_path.exists():
+                # File may not exist yet (e.g. reference-only entries)
+                entry["tools"] = entry.get("tools") or []
+                missing += 1
+                continue
 
-        try:
-            pb = json.loads(pb_path.read_text(encoding="utf-8"))
-            tools = extract_tools(pb)
-            entry["tools"] = tools
-            updated += 1
-        except Exception as exc:
-            print(f"  WARN: could not read {rel_file}: {exc}")
-            entry["tools"] = entry.get("tools") or []
-            skipped += 1
+            try:
+                pb = json.loads(pb_path.read_text(encoding="utf-8"))
+                tools = extract_tools(pb)
+                entry["tools"] = tools
+                updated += 1
+            except Exception as exc:
+                logger.warning(f"Could not read {rel_file}: {exc}")
+                entry["tools"] = entry.get("tools") or []
+                skipped += 1
 
-    manifest["generated"] = date.today().isoformat()
-    MANIFEST_PATH.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+        manifest["generated"] = date.today().isoformat()
+        MANIFEST_PATH.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
-    print(f"Manifest tools updated: {updated}  skipped: {skipped}  missing: {missing}")
+        logger.info(f"Manifest tools updated: {updated}  skipped: {skipped}  missing: {missing}")
+        return 0
+    
+    except FileNotFoundError as e:
+        logger.error(f"Manifest file not found: {e}")
+        return 1
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in manifest: {e}")
+        return 1
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -3,14 +3,36 @@
 # Scans the /var/www/localhost/htdocs/playbooks/ directory and returns
 # a list of override playbooks with metadata for frontend discovery.
 
+# ── Security: Restrict CORS to allowed origins ────────────────────────
+ORIGIN="${HTTP_ORIGIN:-}"
+
+# Only allow requests from known origins
+if [ -n "$ORIGIN" ]; then
+    case "$ORIGIN" in
+        http://localhost:9020|http://localhost:8080|http://localhost)
+            # Allowed origin
+            ;;
+        *)
+            # Blocked origin - return empty response
+            echo "Content-Type: application/json"
+            echo ""
+            echo '[]'
+            exit 0
+            ;;
+    esac
+fi
+
 PLAYBOOKS_OVERRIDE_DIR="/var/www/localhost/htdocs/playbooks"
 
 echo "Content-Type: application/json"
-echo "Access-Control-Allow-Origin: *"
+# Only echo origin if it's whitelisted
+if [ -n "$ORIGIN" ] && echo "$ALLOWED_ORIGINS" | grep -q "^$ORIGIN$"; then
+    echo "Access-Control-Allow-Origin: $ORIGIN"
+fi
 echo ""
 
-# If no playbooks directory or no files, return empty array
-if [ ! -d "$PLAYBOOKS_OVERRIDE_DIR" ] || [ -z "$(find "$PLAYBOOKS_OVERRIDE_DIR" -maxdepth 3 -name '*.json' 2>/dev/null | head -1)" ]; then
+# ── Safety checks ──────────────────────────────────────────────────────
+if [ ! -d "$PLAYBOOKS_OVERRIDE_DIR" ] || [ ! -r "$PLAYBOOKS_OVERRIDE_DIR" ]; then
     echo "[]"
     exit 0
 fi

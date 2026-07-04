@@ -6,6 +6,32 @@ services:
     ports:
       - "9020:8080"
     restart: unless-stopped
+    
+    # ── Resource limits (prevent runaway processes) ─────────────────────
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # ── Logging configuration ──────────────────────────────────────────
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    
+    # ── Health monitoring ──────────────────────────────────────────────
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    
     volumes:
       # Custom-override playbooks: place files here mirroring playbooks-main/ structure.
       # A file at app/playbooks/malware/pb01-ransomware-infection.json overrides the built-in.
