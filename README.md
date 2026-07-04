@@ -1,4 +1,4 @@
-# SOC IR Playbook Library — Docker Deployment
+# SOC IR Playbook Library - Docker Deployment
 
 Alpine + Apache serving the SOC Incident Response Playbook Library.
 Custom playbooks created via the web form are persisted as JSON files
@@ -62,7 +62,7 @@ docker run --rm \
 ```bash
 # Replace index.html or CGI scripts, then rebuild
 docker compose up -d --build
-# The playbook-data volume is untouched — custom playbooks survive the rebuild
+# The playbook-data volume is untouched - custom playbooks survive the rebuild
 ```
 
 ## Air-gapped deployment

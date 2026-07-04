@@ -7,10 +7,10 @@ services:
       - "9020:8080"
     restart: unless-stopped
     volumes:
-      # Previous Docker named volume (kept for reference):
-      # - playbook-data:/playbooks
-      # Host bind mount for easier manual management of overrides/custom playbooks:
-      - ./playbooks-data:/playbooks
+      # Custom-override playbooks: place files here mirroring playbooks-main/ structure.
+      # A file at app/playbooks/malware/pb01-ransomware-infection.json overrides the built-in.
+      - ./app/playbooks:/var/www/localhost/htdocs/playbooks
+      #- ./app/playbooks-main:/var/www/localhost/htdocs/playbooks-main
     environment:
       # ── Active SIEM/tool tabs (exactly 6 shown) ───────────────────────────
       # Available values: splunk, kql, security_onion, qradar, sigma, sysmon,

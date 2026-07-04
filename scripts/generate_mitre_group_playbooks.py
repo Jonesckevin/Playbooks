@@ -19,7 +19,7 @@ from pathlib import Path
 
 ATTACK_URL = "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json"
 ROOT = Path(__file__).resolve().parents[1]
-PLAYBOOK_ROOT = ROOT / "app" / "playbooks"
+PLAYBOOK_ROOT = ROOT / "app" / "playbooks-main"
 GROUP_DIR = PLAYBOOK_ROOT / "threat-groups"
 MANIFEST_PATH = PLAYBOOK_ROOT / "manifest.json"
 
@@ -150,164 +150,51 @@ def tactic_summary(techniques: list[dict]) -> str:
     return ", ".join(TACTIC_LABELS.get(t, t.replace("-", " ").title()) for t in tactics)
 
 
-def technique_ids_for_query(techniques: list[dict], limit: int = 20) -> str:
-    ids = [tech["id"] for tech in techniques[:limit]]
-    return " OR ".join(ids) if ids else "Gxxxx"
-
-
-def common_sysmon_xml(group_name: str, techniques: list[dict]) -> str:
-    tech_ids = ",".join(tech["id"] for tech in techniques[:8]) or "Gxxxx"
-    return f"""<Sysmon schemaversion="4.90">
-  <EventFiltering>
-    <ProcessCreate onmatch="include">
-      <Rule groupRelation="or" name="{group_name} - ATT&CK process behavior" technique="{tech_ids}">
-        <CommandLine condition="contains any">-enc;-encodedcommand;IEX;FromBase64String;DownloadString;regsvr32;mshta;wmic;winrs;rundll32</CommandLine>
-        <Image condition="end with any">\\powershell.exe;\\cmd.exe;\\wscript.exe;\\cscript.exe;\\mshta.exe;\\regsvr32.exe;\\rundll32.exe;\\wmic.exe;\\winrs.exe</Image>
-      </Rule>
-    </ProcessCreate>
-    <ProcessAccess onmatch="include">
-      <Rule groupRelation="and" name="{group_name} - Credential access candidate" technique="T1003">
-        <TargetImage condition="is">C:\\Windows\\System32\\lsass.exe</TargetImage>
-        <SourceImage condition="end with any">\\procdump.exe;\\rundll32.exe;\\powershell.exe;\\mimikatz.exe</SourceImage>
-      </Rule>
-    </ProcessAccess>
-    <NetworkConnect onmatch="include">
-      <Rule groupRelation="or" name="{group_name} - C2 and lateral movement ports" technique="T1071,T1021">
-        <DestinationPort condition="is any">53;80;443;445;3389;5985;5986;8080;8443</DestinationPort>
-      </Rule>
-    </NetworkConnect>
-    <RegistryEvent onmatch="include">
-      <Rule groupRelation="or" name="{group_name} - Persistence and defense evasion registry changes" technique="T1547,T1562">
-        <TargetObject condition="contains any">\\Run;\\RunOnce;\\Services\\;\\Terminal Server\\WinStations\\RDP-Tcp\\UserAuthentication;\\Lsa\\Security Packages</TargetObject>
-      </Rule>
-    </RegistryEvent>
-    <DnsQuery onmatch="include">
-      <QueryName condition="contains any">.top;.xyz;.club;.online;.site;.cc</QueryName>
-    </DnsQuery>
-  </EventFiltering>
-</Sysmon>"""
-
-
-def build_detection_steps(group: dict, techniques: list[dict]) -> list[dict]:
+def build_detection_steps(group: dict, techniques: list[dict]) -> list[dict]:  # noqa: keep signature for reference
+    """Build minimal investigation steps from STIX context - no hardcoded queries."""
     group_name = group["name"]
-    group_id = group["mitre_id"]
-    top_techniques = technique_summary(techniques)
-    query_ids = technique_ids_for_query(techniques)
-    aliases = ", ".join(group.get("aliases", [])[:12]) or "No public aliases listed"
-    tactics = tactic_summary(techniques)
-    mitre_url = group.get("url") or f"https://attack.mitre.org/groups/{group_id}/"
-
-    security_onion_base = (
-        f"# Security Onion KQL - {group_name} ({group_id}) ATT&CK technique pivots\n"
-        f"(rule.threat.technique.id:({query_ids}) OR threat.technique.id:({query_ids}) "
-        f"OR event.module:sysmon OR event.dataset:suricata.eve OR event.dataset:zeek.*)"
-    )
-    osquery_process = """SELECT pid, name, path, cmdline, parent, start_time
-FROM processes
-WHERE cmdline LIKE '%-enc%'
-   OR cmdline LIKE '%FromBase64String%'
-   OR cmdline LIKE '%DownloadString%'
-   OR name IN ('powershell.exe','cmd.exe','rundll32.exe','regsvr32.exe','mshta.exe','wmic.exe','winrs.exe');"""
-    velociraptor_process = """LET procs = SELECT Name, Exe, CommandLine, Pid,
-  authenticode(filename=Exe).Trusted AS Trusted
-FROM pslist() WHERE Exe
-SELECT Name, Exe, CommandLine, Pid, Trusted
-FROM procs
-WHERE NOT Trusted OR CommandLine =~ '(?i)(-enc|frombase64string|downloadstring|regsvr32|mshta|wmic|winrs)'"""
+    group_id   = group["mitre_id"]
+    aliases    = ", ".join(group.get("aliases", [])[:12]) or "No public aliases listed"
+    tactics    = tactic_summary(techniques)
+    top_techs  = technique_summary(techniques)
+    mitre_url  = group.get("url") or f"https://attack.mitre.org/groups/{group_id}/"
 
     return [
         {
             "n": 1,
             "title": f"Profile {group_name} with MITRE ATT&CK context",
             "detail": (
-                f"MITRE Group ID: {group_id}. Aliases: {aliases}. Primary mapped tactics: {tactics}. "
-                f"Mapped techniques: {top_techniques}. Source: {mitre_url}. Use this step to scope the hunt, "
-                "select relevant telemetry, and prioritize techniques that overlap the current alert or campaign."
+                f"MITRE Group ID: {group_id}. Aliases: {aliases}. Primary tactics: {tactics}. "
+                f"Techniques: {top_techs}. Reference: {mitre_url}."
             ),
-            "queries": {
-                "security_onion": security_onion_base,
-                "sysmon": common_sysmon_xml(group_name, techniques),
-                "osquery": osquery_process,
-                "velociraptor": velociraptor_process,
-                "elastic": security_onion_base.replace("Security Onion KQL", "Elastic KQL"),
-                "carbon_black": "process_name:(powershell.exe OR cmd.exe OR rundll32.exe OR regsvr32.exe OR mshta.exe OR wmic.exe OR winrs.exe) OR netconn_count:[1 TO *]",
-            },
+            "queries": {},
         },
         {
             "n": 2,
             "title": "Hunt initial access, execution, and persistence behaviors",
             "detail": (
-                "Search for public-facing exploitation, suspicious script execution, LOLBins, web shells, scheduled tasks, "
-                "service creation, and autorun registry changes. Tune by asset role: web servers, domain controllers, and "
-                "admin jump boxes should have separate baselines."
+                "Search for public-facing exploitation, suspicious script execution, LOLBins, web shells, "
+                "scheduled tasks, service creation, and autorun registry changes attributed to this group's technique set."
             ),
-            "queries": {
-                "security_onion": """# Initial access/execution/persistence hunt
-(event.category:process AND process.name:(powershell.exe OR cmd.exe OR wscript.exe OR cscript.exe OR mshta.exe OR regsvr32.exe OR rundll32.exe))
-OR (event.category:file AND file.extension:(aspx OR jsp OR php OR ps1 OR vbs OR js))
-OR (event.code:(4698 OR 4702 OR 7045))
-OR (registry.path:*\\Software\\Microsoft\\Windows\\CurrentVersion\\Run* OR registry.path:*\\SYSTEM\\CurrentControlSet\\Services\\*)""",
-                "sysmon": common_sysmon_xml(group_name, techniques),
-                "osquery": """SELECT name, action, path FROM scheduled_tasks
-UNION
-SELECT name, path, status FROM services
-WHERE path LIKE '%AppData%' OR path LIKE '%Temp%' OR path LIKE '%ProgramData%';""",
-                "velociraptor": """SELECT FullPath, Mtime, Size
-FROM glob(globs=['C:/inetpub/wwwroot/**/*.aspx','C:/ProgramData/**/*.ps1','C:/Users/*/AppData/**/*.exe'])
-WHERE Mtime > timestamp(epoch=now().Unix - 7*24*60*60)""",
-                "elastic": """event.category:"process" and process.name:("powershell.exe" or "cmd.exe" or "mshta.exe" or "regsvr32.exe" or "rundll32.exe")""",
-                "carbon_black": "(process_name:powershell.exe OR process_name:cmd.exe OR process_name:mshta.exe OR process_name:regsvr32.exe OR process_name:rundll32.exe) AND (cmdline:-enc OR cmdline:DownloadString OR cmdline:FromBase64String OR cmdline:http)",
-            },
+            "queries": {},
         },
         {
             "n": 3,
             "title": "Hunt credential access, discovery, and lateral movement",
             "detail": (
-                "Prioritize LSASS access, SAM/SECURITY hive reads, domain and network discovery, RDP/SMB/WinRM movement, "
-                "and authentication anomalies. Correlate endpoint process telemetry with Zeek conn/smb/kerberos logs."
+                "Investigate LSASS access, domain enumeration, network discovery, RDP/SMB/WinRM lateral movement, "
+                "and authentication anomalies consistent with this group's mapped techniques."
             ),
-            "queries": {
-                "security_onion": """# Credential access + discovery + lateral movement
-(event.module:sysmon AND event.code:10 AND process.Ext.api.target_process.executable:*\\lsass.exe)
-OR (event.category:process AND process.command_line:(*nltest* OR *net group* OR *net view* OR *whoami /all* OR *ipconfig /all*))
-OR (event.category:network AND destination.port:(88 OR 135 OR 139 OR 389 OR 445 OR 3389 OR 5985 OR 5986))""",
-                "sysmon": common_sysmon_xml(group_name, techniques),
-                "osquery": """SELECT * FROM process_open_sockets
-WHERE remote_port IN (88,135,139,389,445,3389,5985,5986);
-
-SELECT pid, name, cmdline FROM processes
-WHERE cmdline LIKE '%nltest%' OR cmdline LIKE '%net group%' OR cmdline LIKE '%whoami /all%' OR cmdline LIKE '%ipconfig /all%';""",
-                "velociraptor": """SELECT Pid, Process, LocalAddress, LocalPort, RemoteAddress, RemotePort, Status
-FROM netstat()
-WHERE RemotePort IN (88,135,139,389,445,3389,5985,5986)""",
-                "elastic": """event.category:"network" and destination.port:(88 or 135 or 139 or 389 or 445 or 3389 or 5985 or 5986)""",
-                "carbon_black": "netconn_port:(88 OR 135 OR 139 OR 389 OR 445 OR 3389 OR 5985 OR 5986) OR cmdline:(nltest OR \"net group\" OR \"whoami /all\")",
-            },
+            "queries": {},
         },
         {
             "n": 4,
-            "title": "Hunt command-and-control, ingress transfer, and exfiltration",
+            "title": "Hunt command-and-control and exfiltration",
             "detail": (
-                "Look for rare outbound destinations, DNS TXT/NULL or high-entropy queries, suspicious HTTP POST activity, "
-                "proxy-like behavior, and large outbound transfers. Baseline by subnet and server role before suppressing."
+                "Monitor for C2 beaconing patterns, DNS tunneling, high-entropy DNS queries, suspicious HTTP POST "
+                "activity, and large outbound transfers matching this group's known tradecraft."
             ),
-            "queries": {
-                "security_onion": """# C2 and exfiltration hunt
-(event.category:network AND destination.port:(53 OR 80 OR 443 OR 8080 OR 8443 OR 1080 OR 8888))
-OR (event.dataset:zeek.dns AND (dns.question.type:(TXT OR NULL) OR dns.question.name:*[A-Za-z0-9]{20,}*))
-OR (event.dataset:zeek.http AND http.request.method:POST AND (network.bytes:>1000000 OR bytes:>1000000))
-OR (event.dataset:suricata.eve AND event.kind:alert)""",
-                "sysmon": common_sysmon_xml(group_name, techniques),
-                "osquery": """SELECT p.pid, p.name, p.path, s.remote_address, s.remote_port
-FROM processes p
-JOIN process_open_sockets s ON p.pid = s.pid
-WHERE s.remote_port IN (53,80,443,8080,8443,1080,8888);""",
-                "velociraptor": """SELECT Pid, Process, RemoteAddress, RemotePort, Status
-FROM netstat()
-WHERE RemotePort IN (53,80,443,8080,8443,1080,8888)""",
-                "elastic": """event.category:"network" and destination.port:(53 or 80 or 443 or 8080 or 8443 or 1080 or 8888)""",
-                "carbon_black": "netconn_port:(53 OR 80 OR 443 OR 8080 OR 8443 OR 1080 OR 8888) AND NOT process_name:(chrome.exe OR msedge.exe OR firefox.exe OR outlook.exe OR teams.exe)",
-            },
+            "queries": {},
         },
     ]
 
@@ -324,7 +211,7 @@ def build_playbook(group: dict, techniques: list[dict], num: int) -> dict:
     return {
         "id": f"apt-{group_id.lower()}",
         "num": num,
-        "name": f"Group — {group_name}",
+        "name": f"Group - {group_name}",
         "fullName": f"{group_name} ({group_id}) Threat Group Hunt",
         "type": "Threat Group / APT Hunt",
         "severity": "Critical",
@@ -399,7 +286,10 @@ def main() -> int:
         group_id = group["mitre_id"]
         playbook_id = f"apt-{group_id.lower()}"
         rel_file = f"threat-groups/{playbook_id}-{slugify(group.get('name', group_id))}.json"
-        if playbook_id in existing_ids or rel_file in existing_files:
+        # Skip only when the entry already exists AND the file is present on disk.
+        # Regenerate if the file is missing (e.g. fresh build from committed manifest).
+        file_exists = (PLAYBOOK_ROOT / rel_file).exists()
+        if (playbook_id in existing_ids or rel_file in existing_files) and file_exists:
             continue
 
         techniques = sorted(
@@ -415,8 +305,7 @@ def main() -> int:
             json.dumps(playbook, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-        manifest["playbooks"].append(
-            {
+        new_entry = {
                 "id": playbook_id,
                 "num": max_num,
                 "name": playbook["name"],
@@ -427,8 +316,17 @@ def main() -> int:
                 "source": "library",
                 "file": rel_file,
                 "related": [],
+                "tools": [],
             }
+        # Upsert: replace existing entry or append new one
+        existing_idx = next(
+            (i for i, p in enumerate(manifest["playbooks"]) if p.get("id") == playbook_id),
+            None,
         )
+        if existing_idx is not None:
+            manifest["playbooks"][existing_idx] = new_entry
+        else:
+            manifest["playbooks"].append(new_entry)
         added += 1
 
     manifest["generated"] = date.today().isoformat()

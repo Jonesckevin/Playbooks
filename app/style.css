@@ -43,7 +43,7 @@
   --teal-bg:rgba(15,110,86,0.25);--teal-t:#3ecfb0;
   --purple-bg:rgba(83,58,183,0.25);--purple-t:#a88af5;
   --gray-bg:rgba(95,94,90,0.18);--gray-t:#909090;
-  /* Adaptive accent — brand blue in dark mode */
+  /* Adaptive accent - brand blue in dark mode */
   --accent:#0078d4;--accent-fg:#fff;
   /* Stronger shadows for dark surfaces */
   --shadow-card:0 2px 12px rgba(0,0,0,.45);
@@ -54,7 +54,7 @@
   --focus-ring:0 0 0 2px rgba(90,173,255,.22);
   /* Brighter severity dots for dark backgrounds */
   --dot-crit:#ff6b6b;--dot-high:#ff9f43;--dot-med:#5aadff;--dot-low:#7dd660;--dot-custom:#a88af5;
-  /* Navigator gradients — use lighter blue tint */
+  /* Navigator gradients - use lighter blue tint */
   --nav-grad-1:rgba(90,173,255,.14);--nav-grad-2:rgba(90,173,255,.04);
   --nav-grad-h1:rgba(90,173,255,.22);--nav-grad-h2:rgba(90,173,255,.07);
   --nav-grad-a1:rgba(90,173,255,.28);--nav-grad-a2:rgba(90,173,255,.1);
@@ -399,10 +399,10 @@ details[open]>.step-query-summary{border-bottom:1px solid var(--border)}
 }
 .theme-toggle-btn:hover { background: var(--bg2); color: var(--text); border-color: var(--text3); }
 
-/* ===== SEVERITY FILTER BAR (hidden — kept for JS compat) ===== */
+/* ===== SEVERITY FILTER BAR (hidden - kept for JS compat) ===== */
 .sev-filter-bar { display: none; }
 
-/* ===== SOURCE FILTER BAR (hidden — kept for JS compat) ===== */
+/* ===== SOURCE FILTER BAR (hidden - kept for JS compat) ===== */
 .source-filter-bar { display: none; }
 
 /* ===== INLINE FILTER ROW (severity + source dropdowns) ===== */

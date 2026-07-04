@@ -1,5 +1,6 @@
-const LIBRARY_MANIFEST = "playbooks/manifest.json";
-const LIBRARY_ROOT = "playbooks";
+const LIBRARY_MANIFEST = "playbooks-main/manifest.json";
+const LIBRARY_MAIN_ROOT = "playbooks-main";   // built-in playbooks (baked into image)
+const LIBRARY_OVERRIDE_ROOT = "playbooks";     // custom overrides (Docker volume)
 const API_LOAD = "cgi-bin/load_playbooks.sh";
 const API_SAVE = "cgi-bin/save_playbook.sh";
 const API_UPDATE = "cgi-bin/update_playbook.sh";
@@ -7,7 +8,7 @@ const API_DELETE = "cgi-bin/delete_playbook.sh";
 const API_INCIDENT_LOAD = "cgi-bin/load_incident_state.sh";
 const API_INCIDENT_SAVE = "cgi-bin/save_incident_state.sh";
 const API_INCIDENT_DELETE = "cgi-bin/delete_incident_state.sh";
-const MITRE_TECHNIQUES_URL = "playbooks/mitre-techniques.json";
+const MITRE_TECHNIQUES_URL = "playbooks-main/mitre-index.json";
 const NAVIGATOR_APP_URL = "attack-navigator/index.html";
 const DEFAULT_TOOL_FALLBACK = "security_onion";
 let DEFAULT_TOOL = DEFAULT_TOOL_FALLBACK;
@@ -131,14 +132,20 @@ function hasQueryValue(value) {
 function computeCompleteness(pb) {
   const tools = state.activeTools;
   const result = {};
+  
+  // Dynamically check if steps have queries for each tool
+  // This works for all playbook types (manifest, custom, override)
   const allSteps = [
-    ...(pb.detSteps || pb.investigation?.detectionAnalysis || []),
-    ...(pb.contSteps || pb.investigation?.containment || []),
-    ...(pb.eradSteps || pb.investigation?.eradication || []),
-    ...(pb.recSteps || pb.investigation?.recovery || [])
+    ...(pb.investigation?.detectionAnalysis || []),
+    ...(pb.investigation?.containment || []),
+    ...(pb.investigation?.eradication || []),
+    ...(pb.investigation?.recovery || [])
   ];
+  
   for (const tool of tools) {
-    result[tool] = allSteps.some((s) => hasQueryValue(s?.queries?.[tool]));
+    result[tool] = allSteps.some(step => 
+      step.queries?.[tool] && String(step.queries[tool]).trim().length > 0
+    );
   }
   return result;
 }
@@ -499,6 +506,7 @@ function normalizePlaybook(pb) {
     },
     updated: pb.updated || "",
     related: Array.isArray(pb.related) ? pb.related : [],
+    tools: Array.isArray(pb.tools) ? pb.tools : [],  // Tool coverage from manifest (populated at build time)
     // Technique-specific fields (present when cat === "Techniques")
     tactic: pb.tactic || "",
     tacticId: pb.tacticId || "",
@@ -530,12 +538,20 @@ async function fetchJson(url) {
   return res.json();
 }
 
+// Load a playbook file, checking the custom-override volume first.
+// Falls back to the built-in playbooks-main/ if no override exists.
+async function fetchPlaybookFile(relFile) {
+  const overrideRes = await fetch(`${LIBRARY_OVERRIDE_ROOT}/${relFile}`, { cache: "no-store" });
+  if (overrideRes.ok) return overrideRes.json();
+  return fetchJson(`${LIBRARY_MAIN_ROOT}/${relFile}`);
+}
+
 async function loadManifest() {
   const data = await fetchJson(LIBRARY_MANIFEST);
   state.manifest = Array.isArray(data.playbooks) ? data.playbooks : [];
 }
 
-// Lazy loading: create lightweight stubs from manifest data — no HTTP requests.
+// Lazy loading: create lightweight stubs from manifest data - no HTTP requests.
 // Full playbook JSON is fetched on demand when a playbook is opened.
 function initLibraryStubs() {
   for (const item of state.manifest) {
@@ -557,6 +573,27 @@ async function loadCustomPlaybooks() {
       continue;
     }
     state.customById.set(item.id, item);
+  }
+}
+
+// Discover playbooks in the override volume (app/playbooks/) at runtime
+async function loadOverridePlaybooks() {
+  try {
+    const overrideList = await fetchJson("cgi-bin/list_override_playbooks.sh").catch(() => []);
+    if (!Array.isArray(overrideList)) return;
+    for (const item of overrideList) {
+      if (!item?.id || !item?.file) continue;
+      // Mark as override - will be updated to library-override or custom in buildMergedPlaybooks
+      const stub = normalizePlaybook({
+        ...item,
+        source: state.manifest.some(m => m.id === item.id) ? "library-override" : "custom"
+      });
+      if (!state.libraryById.has(item.id)) {
+        state.libraryById.set(item.id, stub);
+      }
+    }
+  } catch (err) {
+    console.debug("Override playbooks discovery failed (expected if cgi-bin/list_override_playbooks.sh not available):", err);
   }
 }
 
@@ -991,7 +1028,10 @@ async function openPlaybook(id, navEl) {
   // If this playbook hasn't been fully loaded yet, fetch the detail JSON now
   if (!state._libraryFileFetched.has(id)) {
     const manifestItem = state.manifest.find((m) => m.id === id);
-    if (manifestItem?.file) {
+    const overrideItem = state.libraryById.get(id); // Check for override playbooks
+    const fileToFetch = manifestItem?.file || overrideItem?.file;
+    
+    if (fileToFetch) {
       // Show loading spinner while fetching
       const detailEl = document.getElementById("detail-content");
       if (detailEl) {
@@ -999,17 +1039,26 @@ async function openPlaybook(id, navEl) {
       }
       showPanel("detail", navEl || document.getElementById(`nav-${id}`));
       try {
-        const data = await fetchJson(`${LIBRARY_ROOT}/${manifestItem.file}`);
+        const data = await fetchPlaybookFile(fileToFetch);
         state._libraryFileFetched.add(id);
-        const libPb = normalizePlaybook({ ...manifestItem, ...data, source: "library" });
-        state.libraryById.set(id, libPb);
-        // Re-apply any custom/override data on top of the freshly loaded library base
-        const custom = state.customById.get(id);
-        if (custom) {
-          const merged = normalizePlaybook({ ...manifestItem, ...data, ...custom,
-            source: custom.source === "custom" ? "custom" : "library-override" });
-          state.libraryById.set(id, merged);
+        
+        if (manifestItem?.file) {
+          // Built-in playbook from manifest
+          const libPb = normalizePlaybook({ ...manifestItem, ...data, source: "library" });
+          state.libraryById.set(id, libPb);
+          // Re-apply any custom/override data on top of the freshly loaded library base
+          const custom = state.customById.get(id);
+          if (custom) {
+            const merged = normalizePlaybook({ ...manifestItem, ...data, ...custom,
+              source: custom.source === "custom" ? "custom" : "library-override" });
+            state.libraryById.set(id, merged);
+          }
+        } else {
+          // Override playbook - merge file data with existing stub
+          const mergedData = normalizePlaybook({ ...overrideItem, ...data, source: overrideItem?.source || "custom" });
+          state.libraryById.set(id, mergedData);
         }
+        
         // Refresh the allPlaybooks entry so cards/nav stay in sync
         const idx = state.allPlaybooks.findIndex((p) => p.id === id);
         if (idx >= 0) state.allPlaybooks[idx] = state.libraryById.get(id);
@@ -1019,12 +1068,12 @@ async function openPlaybook(id, navEl) {
         // Fall back to stub/custom data already in pb
       }
     } else {
-      // Pure custom playbook (no library base) — already fully loaded via CGI
+      // Pure custom playbook (no library base, no file) - already fully loaded via CGI
       pb = state.customById.get(id) || pb;
       state._libraryFileFetched.add(id); // mark to skip future fetch attempts
     }
   } else {
-    // Already fetched — use the cached fully-loaded version
+    // Already fetched - use the cached fully-loaded version
     pb = state.libraryById.get(id) || state.customById.get(id) || pb;
   }
 
@@ -1505,6 +1554,7 @@ function exportSoar(pbId) {
 
 async function refreshData() {
   await loadCustomPlaybooks();
+  await loadOverridePlaybooks();
   await loadIncidentStates();
   buildMergedPlaybooks();
   renderSidebar();
@@ -1531,7 +1581,7 @@ async function loadToolConfig() {
       const valid = cfg.tools.filter(t => ALL_TOOLS[t]).slice(0, 6);
       if (valid.length > 0) state.activeTools = valid;
     }
-  } catch (_) { /* network error or CGI unavailable — use defaults */ }
+  } catch (_) { /* network error or CGI unavailable - use defaults */ }
   DEFAULT_TOOL = state.activeTools.includes(DEFAULT_TOOL_FALLBACK)
     ? DEFAULT_TOOL_FALLBACK
     : state.activeTools[0];
@@ -1543,7 +1593,7 @@ async function init() {
     await loadToolConfig();
     await loadMitreTechniques();
     await loadManifest();
-    initLibraryStubs();    // instant — no HTTP, builds stubs from manifest
+    initLibraryStubs();    // instant - no HTTP, builds stubs from manifest
     await refreshData();  // loads custom overrides + builds merged state
 
     const savedCardView = localStorage.getItem("pb-card-view");

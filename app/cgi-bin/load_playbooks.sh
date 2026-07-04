@@ -1,8 +1,8 @@
 #!/bin/sh
 # CGI: load_playbooks.sh
-# Reads all .json files from /playbooks/ volume and returns them as a JSON array.
+# Reads all .json files from /var/www/localhost/htdocs/playbooks volume and returns them as a JSON array.
 
-PLAYBOOKS_DIR="/playbooks"
+PLAYBOOKS_DIR="/var/www/localhost/htdocs/playbooks"
 . "/var/www/localhost/cgi-bin/_log.sh"
 
 echo "Content-Type: application/json"

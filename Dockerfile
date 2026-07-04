@@ -1,9 +1,3 @@
-FROM node:20-alpine AS mitre-builder
-
-WORKDIR /build
-COPY scripts/generate-mitre-techniques.mjs /build/scripts/generate-mitre-techniques.mjs
-RUN node /build/scripts/generate-mitre-techniques.mjs /build/mitre-techniques.json
-
 FROM node:22-alpine AS navigator-builder
 
 RUN apk add --no-cache git
@@ -15,8 +9,8 @@ RUN npm run build -- --configuration production --base-href /attack-navigator/ -
 
 FROM alpine:3.19
 
-# ── Install Apache, jq, Python, and bash ────────────────────────────────────
-RUN apk add --no-cache apache2 jq python3 bash
+# ── Install Apache, Python, and jq ───────────────────────────────────────
+RUN apk add --no-cache apache2 python3 bash jq
 
 # ── Enable mod_cgi ────────────────────────────────────────────────────────
 RUN sed -i 's/#LoadModule cgi_module/LoadModule cgi_module/' /etc/apache2/httpd.conf
@@ -44,24 +38,35 @@ RUN rm -rf /var/www/localhost/htdocs/* && \
     ln -sf /proc/self/fd/1 /var/www/logs/access.log && \
     ln -sf /proc/self/fd/2 /var/www/logs/error.log
 
-# ── Copy app ──────────────────────────────────────────────────────────────
+# ── Copy frontend app ─────────────────────────────────────────────────────
 COPY app/index.html app/style.css app/app.js app/logo.svg /var/www/localhost/htdocs/
 RUN ln -sf /var/www/localhost/htdocs/logo.svg /var/www/localhost/htdocs/favicon.ico
 
-# ── Generate queries at build time ────────────────────────────────────────
-# Mirrors the expected directory structure so the script's path resolution works:
-#   /tmp/build/scripts/update_playbook_queries.py  →  parents[1] = /tmp/build
-#   /tmp/build/app/playbooks/                       →  PLAYBOOK_DIR resolved correctly
+# ── Generate MITRE playbooks at build time from live STIX data ───────────
+# Directory layout inside the build context mirrors the deployed structure so
+# each script's Path(__file__).resolve().parents[1] resolves to /tmp/build.
 COPY scripts/ /tmp/build/scripts/
-COPY app/playbooks/ /tmp/build/app/playbooks/
-RUN python3 /tmp/build/scripts/update_playbook_queries.py
+COPY app/playbooks-main/ /tmp/build/app/playbooks-main/
 
-# ── Copy generated playbooks to htdocs ───────────────────────────────────
-RUN mkdir -p /var/www/localhost/htdocs/playbooks && \
-    cp -r /tmp/build/app/playbooks/. /var/www/localhost/htdocs/playbooks/ && \
+# Generate threat-group playbooks (fetches Enterprise ATT&CK STIX bundle)
+RUN python3 /tmp/build/scripts/generate_mitre_group_playbooks.py
+
+# Generate technique playbooks + mitre-index.json (fetches same STIX bundle)
+RUN python3 /tmp/build/scripts/generate_technique_playbooks.py
+
+# Scan all playbooks and update manifest tools[] coverage index
+RUN python3 /tmp/build/scripts/update_manifest_tools.py
+
+# ── Deploy playbooks-main to htdocs ──────────────────────────────────────
+RUN mkdir -p /var/www/localhost/htdocs/playbooks-main && \
+    cp -r /tmp/build/app/playbooks-main/. /var/www/localhost/htdocs/playbooks-main/ && \
     rm -rf /tmp/build
 
-COPY --from=mitre-builder /build/mitre-techniques.json /var/www/localhost/htdocs/playbooks/mitre-techniques.json
+# ── Create empty playbooks/ dir for the custom-override volume mount ──────
+# Files placed here by the operator (same relative path as playbooks-main/)
+# take precedence when the frontend resolves playbook content.
+RUN mkdir -p /var/www/localhost/htdocs/playbooks
+
 COPY --from=navigator-builder /build/attack-navigator/nav-app/dist/browser/ /var/www/localhost/htdocs/attack-navigator/
 COPY app/cgi-bin/*.sh /var/www/localhost/cgi-bin/
 COPY scripts/ /var/www/localhost/scripts/
@@ -69,20 +74,15 @@ COPY scripts/ /var/www/localhost/scripts/
 RUN sed -i 's/\r$//' /var/www/localhost/cgi-bin/*.sh && \
     chmod +x /var/www/localhost/cgi-bin/*.sh
 
-# ── Create non-root user and group ────────────────────────────────────────
+# ── Non-root user ─────────────────────────────────────────────────────────
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-
-# ── Persistent playbook storage — Docker named volume mounted at /playbooks
-RUN mkdir -p /playbooks && chown appuser:appgroup /playbooks
 RUN chown -R appuser:appgroup /var/www/localhost
 
 USER appuser
 
-VOLUME ["/playbooks"]
+# Custom-override playbooks are supplied via this volume at runtime.
+# Mirror the playbooks-main/ structure; same filename overrides the built-in.
+VOLUME ["/var/www/localhost/htdocs/playbooks"]
 
 EXPOSE 8080
-
-HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
-  CMD ["/var/www/localhost/cgi-bin/healthcheck.sh"]
-
 CMD ["httpd", "-D", "FOREGROUND"]
