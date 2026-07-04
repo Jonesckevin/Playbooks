@@ -3,7 +3,7 @@
   "num": 18,
   "name": "Unauthorised JavaScript Injection on Public",
   "fullName": "Unauthorised JavaScript Injection on Public",
-  "type": "Web Application Compromise – Script Injection",
+  "type": "Web Application Compromise - Script Injection",
   "severity": "High to Critical (especially if PII, card data or authentication data is",
   "priority": "captured)",
   "detection": "Critical",

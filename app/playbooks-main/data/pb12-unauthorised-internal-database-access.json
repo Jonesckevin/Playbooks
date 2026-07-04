@@ -3,7 +3,7 @@
   "num": 12,
   "name": "Unauthorised Internal Database Access",
   "fullName": "Unauthorised Internal Database Access",
-  "type": "Access Control Violation – Data Access Abuse",
+  "type": "Access Control Violation - Data Access Abuse",
   "severity": "High (especially if PII, financial data or intellectual property is involved)",
   "priority": "Critical",
   "detection": "SIEM, Database Activity Monitoring (DAM), User Behaviour Analytics",

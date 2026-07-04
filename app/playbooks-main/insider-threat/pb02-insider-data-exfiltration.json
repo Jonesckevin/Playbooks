@@ -3,7 +3,7 @@
   "num": 2,
   "name": "Insider Data Exfiltration",
   "fullName": "Insider Data Exfiltration",
-  "type": "Insider Threat – Data Exfiltration",
+  "type": "Insider Threat - Data Exfiltration",
   "severity": "High (especially for regulated or confidential data)",
   "priority": "High to Critical",
   "detection": "DLP, SIEM, Proxy logs, CASB, EDR, Email gateway",

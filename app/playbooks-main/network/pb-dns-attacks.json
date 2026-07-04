@@ -3,7 +3,7 @@
   "num": 37,
   "name": "DNS Attacks",
   "fullName": "DNS Attacks (Tunnelling, DGA, Amplification)",
-  "type": "Network – DNS Abuse",
+  "type": "Network - DNS Abuse",
   "severity": "Medium to High",
   "priority": "High",
   "detection": "sourcetype=dns, sourcetype=firewall, sourcetype=netflow",

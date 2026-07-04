@@ -3,7 +3,7 @@
   "num": 10,
   "name": "Cloud Storage Misconfiguration Exposure",
   "fullName": "Cloud Storage Misconfiguration Exposure",
-  "type": "Data Exposure – Misconfiguration",
+  "type": "Data Exposure - Misconfiguration",
   "severity": "High to Critical (depends on sensitivity of data)",
   "priority": "High",
   "detection": "Cloud Security Posture Management (CSPM), SIEM, Threat Intel,",
@@ -237,7 +237,7 @@
     },
     {
       "name": "Impact Assessment Completion",
-      "target": "Within 24–48 hours"
+      "target": "Within 24-48 hours"
     },
     {
       "name": "Policy Remediation Time",

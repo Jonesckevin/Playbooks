@@ -3,7 +3,7 @@
   "num": 33,
   "name": "Abuse of Stolen Session Tokens in SaaS",
   "fullName": "Abuse of Stolen Session Tokens in SaaS",
-  "type": "Account Hijack – Session Token Abuse",
+  "type": "Account Hijack - Session Token Abuse",
   "severity": "High to Critical (based on data access and privilege level)",
   "priority": "Critical",
   "detection": "CASB, SIEM, EDR, SaaS Audit Logs, User Reports, Threat Intelligence",

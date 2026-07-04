@@ -3,7 +3,7 @@
   "num": 36,
   "name": "Unauthorised SaaS OAuth Application",
   "fullName": "Unauthorised SaaS OAuth Application",
-  "type": "OAuth Abuse – Unauthorised Third-Party App",
+  "type": "OAuth Abuse - Unauthorised Third-Party App",
   "severity": "High (depending on the scopes granted and data accessed)",
   "priority": "High to Critical",
   "detection": "CASB, SSPM, SaaS Admin Portals, SIEM, Threat Intelligence Feeds",

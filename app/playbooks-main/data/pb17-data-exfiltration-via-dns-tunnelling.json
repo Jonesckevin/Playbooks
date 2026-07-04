@@ -3,7 +3,7 @@
   "num": 17,
   "name": "Data Exfiltration via DNS Tunnelling",
   "fullName": "Data Exfiltration via DNS Tunnelling",
-  "type": "Covert Channel – Data Exfiltration",
+  "type": "Covert Channel - Data Exfiltration",
   "severity": "High to Critical (especially if sensitive data is confirmed to be",
   "priority": "exfiltrated)",
   "detection": "Critical",

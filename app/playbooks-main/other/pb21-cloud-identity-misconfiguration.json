@@ -3,7 +3,7 @@
   "num": 21,
   "name": "Cloud Identity Misconfiguration",
   "fullName": "Cloud Identity Misconfiguration",
-  "type": "Misconfiguration – IAM / Access Policy",
+  "type": "Misconfiguration - IAM / Access Policy",
   "severity": "High to Critical (especially if privileged access or sensitive data is",
   "priority": "exposed)",
   "detection": "Critical",

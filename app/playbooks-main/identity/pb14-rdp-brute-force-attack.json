@@ -3,7 +3,7 @@
   "num": 14,
   "name": "RDP Brute-Force Attack",
   "fullName": "RDP Brute-Force Attack",
-  "type": "Credential Attack – RDP Login Abuse",
+  "type": "Credential Attack - RDP Login Abuse",
   "severity": "High (especially for privileged or sensitive systems)",
   "priority": "Critical if access is gained",
   "detection": "SIEM, Windows Security Event Logs, EDR, IDS/IPS, Firewall logs,",

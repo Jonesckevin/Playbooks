@@ -3,7 +3,7 @@
   "num": 27,
   "name": "Unauthorised Cloud Database Snapshot Exports",
   "fullName": "Unauthorised Cloud Database Snapshot Exports",
-  "type": "Data Exposure – Snapshot Abuse",
+  "type": "Data Exposure - Snapshot Abuse",
   "severity": "High to Critical (especially if PII, financial data or secrets are involved)",
   "priority": "Critical",
   "detection": "Cloud Audit Logs, CSPM Alerts, SIEM, Storage Logs, Database Activity",

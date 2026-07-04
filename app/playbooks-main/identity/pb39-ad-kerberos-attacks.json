@@ -3,7 +3,7 @@
   "num": 39,
   "name": "Active Directory / Kerberos Attacks",
   "fullName": "Active Directory / Kerberos Attacks",
-  "type": "Credential Access – Kerberos / AD Abuse",
+  "type": "Credential Access - Kerberos / AD Abuse",
   "severity": "Critical",
   "priority": "Critical (domain-wide credential compromise risk)",
   "detection": "Windows Security Event logs (SIEM), AD audit logs, EDR, Honey accounts",

@@ -3,7 +3,7 @@
   "num": 3,
   "name": "Cloud Account Compromise",
   "fullName": "Cloud Account Compromise",
-  "type": "Identity Compromise – Cloud Account",
+  "type": "Identity Compromise - Cloud Account",
   "severity": "High (especially if privileged account is involved)",
   "priority": "Critical if lateral movement or data access is observed",
   "detection": "SIEM, CASB, Cloud-native logging (e.g., AWS CloudTrail, Azure AD),",
@@ -189,7 +189,7 @@
       }
     },
     {
-      "title": "Monitor the account for 14–30 days post-recovery",
+      "title": "Monitor the account for 14-30 days post-recovery",
       "detail": "Set enhanced alerting on the recovered account for any login from a new location, new device, or outside business hours. Use CASB or SIEM to flag any new OAuth grants or admin actions.",
       "queries": {
         "splunk": "index=cloud user=[recovered_user] | stats count by action, src_ip, location | timechart count span=1d",
@@ -217,7 +217,7 @@
     },
     {
       "name": "Post-incident Monitoring Period",
-      "target": "7–14 days minimum"
+      "target": "7-14 days minimum"
     }
   ],
   "updated": "2026-05-18"

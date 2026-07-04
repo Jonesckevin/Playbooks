@@ -661,8 +661,8 @@ function renderTechniquesSection(items) {
     const subGroupId  = `g-tac-${toSlug(tactic)}`;
     const navItems = tacItems.map((pb) => {
       const dotClass = pb.sev === "critical" ? "d-crit" : pb.sev === "high" ? "d-high" : pb.sev === "medium" ? "d-med" : "d-low";
-      // Strip leading "Txxxx – " prefix from display name
-      const displayName = pb.name.replace(/^T[\d.]+\s*[–-]\s*/, "");
+      // Strip leading "Txxxx - " prefix from display name
+      const displayName = pb.name.replace(/^T[\d.]+\s*[--]\s*/, "");
       const techId = pb.mitre || (pb.name.match(/^(T[\d.]+)/) || [])[1] || "";
       return `<div class="nav-item nav-item-technique" data-title="${esc(pb.name)}" data-cat="${esc(pb.cat)}" id="nav-${esc(pb.id)}" onclick="openPlaybook('${esc(pb.id)}', this)"><span class="dot ${dotClass}"></span><span class="nav-tech-id">${esc(techId)}</span><span class="nav-tech-name">${esc(displayName)}</span></div>`;
     }).join("");

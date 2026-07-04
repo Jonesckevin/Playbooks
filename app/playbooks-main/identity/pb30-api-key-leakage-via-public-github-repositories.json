@@ -3,7 +3,7 @@
   "num": 30,
   "name": "API Key Leakage via Public GitHub Repositories",
   "fullName": "API Key Leakage via Public GitHub Repositories",
-  "type": "Credential Exposure – Source Code Leak",
+  "type": "Credential Exposure - Source Code Leak",
   "severity": "Critical (especially for cloud or production credentials)",
   "priority": "Critical",
   "detection": "GitHub Secret Scanning Alerts, TruffleHog, Gitleaks, Cloud Provider",

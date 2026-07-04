@@ -3,7 +3,7 @@
   "num": 41,
   "name": "ARP Spoofing / MITM / Port Scanning",
   "fullName": "ARP Spoofing / Man-in-the-Middle / Port Scanning",
-  "type": "Network – Man-in-the-Middle / Reconnaissance",
+  "type": "Network - Man-in-the-Middle / Reconnaissance",
   "severity": "High",
   "priority": "High (may precede credential theft, data interception, or lateral movement)",
   "detection": "Network logs (Zeek, Suricata, NetFlow), SIEM, NDR, ARP monitoring (dynamic ARP inspection)",

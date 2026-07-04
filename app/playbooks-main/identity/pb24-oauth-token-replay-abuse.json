@@ -3,7 +3,7 @@
   "num": 24,
   "name": "OAuth Token Replay Abuse",
   "fullName": "OAuth Token Replay Abuse",
-  "type": "Identity Compromise – Token Abuse",
+  "type": "Identity Compromise - Token Abuse",
   "severity": "High to Critical (depending on the scope and privilege of the token)",
   "priority": "Critical",
   "detection": "SIEM, Cloud Audit Logs, API Gateway Logs, Identity Provider Logs (e.g.,",

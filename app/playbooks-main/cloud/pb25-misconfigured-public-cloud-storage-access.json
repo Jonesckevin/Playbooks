@@ -3,7 +3,7 @@
   "num": 25,
   "name": "Misconfigured Public Cloud Storage Access",
   "fullName": "Misconfigured Public Cloud Storage Access",
-  "type": "Cloud Misconfiguration – Public Exposure",
+  "type": "Cloud Misconfiguration - Public Exposure",
   "severity": "High to Critical (depending on sensitivity of exposed data)",
   "priority": "Critical",
   "detection": "CSPM Tools, Cloud Audit Logs, SIEM, Threat Intelligence, Manual",

@@ -3,7 +3,7 @@
   "num": 29,
   "name": "Shadow IT SaaS Usage & Data Exposure",
   "fullName": "Shadow IT SaaS Usage & Data Exposure",
-  "type": "Policy Violation – Unauthorised SaaS Usage",
+  "type": "Policy Violation - Unauthorised SaaS Usage",
   "severity": "Medium to High (depending on the type and sensitivity of data",
   "priority": "involved)",
   "detection": "High",

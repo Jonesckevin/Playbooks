@@ -3,7 +3,7 @@
   "num": 42,
   "name": "MFA Bypass / SIM Swap Attack",
   "fullName": "MFA Bypass / SIM Swap Attack",
-  "type": "Account Takeover – MFA Fatigue / SIM Swap",
+  "type": "Account Takeover - MFA Fatigue / SIM Swap",
   "severity": "Critical",
   "priority": "Critical (complete account takeover with valid session token)",
   "detection": "IdP logs (Azure AD, Okta, Duo), SIEM, MFA provider alerts, User reports",

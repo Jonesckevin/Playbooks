@@ -3,7 +3,7 @@
   "num": 38,
   "name": "Phishing / Spearphishing Attack",
   "fullName": "Phishing / Spearphishing Attack",
-  "type": "Social Engineering – Credential / Malware Delivery",
+  "type": "Social Engineering - Credential / Malware Delivery",
   "severity": "High",
   "priority": "High (Critical if payload executed or credentials captured)",
   "detection": "Email gateway (Proofpoint, Mimecast, Defender for O365), SIEM, EDR, User Reports",

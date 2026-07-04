@@ -188,7 +188,7 @@
     },
     {
       "name": "Remediation Completion Time",
-      "target": "Within 48–72 hours for critical systems"
+      "target": "Within 48-72 hours for critical systems"
     },
     {
       "name": "Third-Party Reassessment Completion",

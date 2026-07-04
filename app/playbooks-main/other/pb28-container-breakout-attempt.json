@@ -3,7 +3,7 @@
   "num": 28,
   "name": "Container Breakout Attempt",
   "fullName": "Container Breakout Attempt",
-  "type": "Container Runtime Security – Escape Attempt",
+  "type": "Container Runtime Security - Escape Attempt",
   "severity": "Critical (especially if host access or privilege escalation is achieved)",
   "priority": "Critical",
   "detection": "Runtime Security Tools, SIEM, EDR, Kubernetes Audit Logs, Falco",

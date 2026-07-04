@@ -3,7 +3,7 @@
   "num": 35,
   "name": "Malicious Insider Staging Data in the Cloud",
   "fullName": "Malicious Insider Staging Data in the Cloud",
-  "type": "Insider Threat – Data Staging / Exfiltration",
+  "type": "Insider Threat - Data Staging / Exfiltration",
   "severity": "High to Critical (based on data sensitivity and exposure level)",
   "priority": "Critical",
   "detection": "DLP, CASB, SIEM, Proxy Logs, Endpoint Agents, User Reports, Insider",

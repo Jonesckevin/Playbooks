@@ -3,7 +3,7 @@
   "num": 26,
   "name": "Lateral Movement Across Cloud Workloads",
   "fullName": "Lateral Movement Across Cloud Workloads",
-  "type": "Cloud Intrusion – Lateral Movement",
+  "type": "Cloud Intrusion - Lateral Movement",
   "severity": "High to Critical (depending on the systems accessed and data",
   "priority": "exposed)",
   "detection": "Critical",
