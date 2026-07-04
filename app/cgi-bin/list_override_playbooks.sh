@@ -56,6 +56,7 @@ fi
         ID=$(jq -r '.id // empty' "$FILE")
         NAME=$(jq -r '.name // .title // empty' "$FILE")
         CATEGORY=$(jq -r '.cat // .category // empty' "$FILE")
+        SOURCE=$(jq -r '.source // "custom"' "$FILE")
         
         if [ -z "$ID" ] || [ -z "$NAME" ]; then
             continue
@@ -72,8 +73,9 @@ fi
             --arg id "$ID" \
             --arg name "$NAME" \
             --arg cat "$CATEGORY" \
+            --arg source "$SOURCE" \
             --arg file "$RELPATH" \
-            '{id: $id, name: $name, cat: $cat, file: $file, override: true}'
+            '{id: $id, name: $name, cat: $cat, source: $source, file: $file, override: true}'
     done
     echo "]"
 }

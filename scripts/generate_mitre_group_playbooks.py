@@ -254,7 +254,7 @@ def build_playbook(group: dict, techniques: list[dict], num: int) -> dict:
         "tools": "Security Onion; Sysmon; OSQuery; Velociraptor; Elastic; Carbon Black",
         "sev": "critical",
         "cat": "Threat Groups",
-        "source": "library",
+        "source": "library-override",
         "updated": date.today().isoformat(),
         "detSteps": build_detection_steps(group, techniques),
         "contSteps": [

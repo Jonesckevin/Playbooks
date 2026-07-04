@@ -62,6 +62,10 @@ const state = {
   activeTools: ["security_onion", "sysmon", "osquery", "velociraptor", "elastic", "carbon_black"],
   // Lazy loading: tracks which library playbook files have been fully fetched
   _libraryFileFetched: new Set(),
+  // Progressive loading: track load progress
+  _customPlaybooksLoading: false,
+  _customPlaybooksTotal: 0,
+  _customPlaybooksLoaded: 0,
 };
 
 function toggleMobileNav() {
@@ -565,15 +569,36 @@ async function loadCustomPlaybooks() {
   state.customById.clear();
   const payload = await fetchJson(API_LOAD).catch(() => []);
   if (!Array.isArray(payload)) return;
-  for (const raw of payload) {
-    if (!raw?.id) continue;
-    const item = normalizePlaybook(raw);
-    if (!isValidPlaybookRecord(item)) {
-      console.warn(`Skipping invalid custom playbook: ${raw.id}`);
-      continue;
+  
+  // Progressive chunked loading: process in 300-item batches to keep UI responsive
+  state._customPlaybooksTotal = payload.length;
+  state._customPlaybooksLoaded = 0;
+  state._customPlaybooksLoading = true;
+  
+  const chunkSize = 300;
+  for (let i = 0; i < payload.length; i += chunkSize) {
+    const chunk = payload.slice(i, i + chunkSize);
+    
+    // Process this chunk
+    for (const raw of chunk) {
+      if (!raw?.id) continue;
+      const item = normalizePlaybook(raw);
+      if (!isValidPlaybookRecord(item)) {
+        console.warn(`Skipping invalid custom playbook: ${raw.id}`);
+        continue;
+      }
+      state.customById.set(item.id, item);
+      state._customPlaybooksLoaded++;
     }
-    state.customById.set(item.id, item);
+    
+    // Update UI and yield to browser between chunks
+    if (i + chunkSize < payload.length) {
+      renderCards();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
   }
+  
+  state._customPlaybooksLoading = false;
 }
 
 // Discover playbooks in the override volume (app/playbooks/) at runtime
@@ -583,10 +608,10 @@ async function loadOverridePlaybooks() {
     if (!Array.isArray(overrideList)) return;
     for (const item of overrideList) {
       if (!item?.id || !item?.file) continue;
-      // Mark as override - will be updated to library-override or custom in buildMergedPlaybooks
+      // Mark as override - use source from JSON file, defaults to custom if not specified
       const stub = normalizePlaybook({
         ...item,
-        source: state.manifest.some(m => m.id === item.id) ? "library-override" : "custom"
+        source: item.source || "custom"
       });
       if (!state.libraryById.has(item.id)) {
         state.libraryById.set(item.id, stub);
@@ -605,7 +630,8 @@ function buildMergedPlaybooks() {
       ...merged.get(id),
       ...custom,
       id,
-      source: hasLibraryBase ? "library-override" : "custom"
+      // Preserve source from custom if set, otherwise determine based on library base
+      source: custom.source || (hasLibraryBase ? "library-override" : "custom")
     });
   }
   state.allPlaybooks = Array.from(merged.values()).sort((a, b) => (a.num || 0) - (b.num || 0));
@@ -729,10 +755,16 @@ function renderCards() {
     return catOk && sevOk && sourceOk && searchOk;
   });
   const visibleIds = new Set(visible.map((pb) => pb.id));
+  
+  // Loading indicator for progressive playbook loading
+  const loadingIndicator = state._customPlaybooksLoading && state._customPlaybooksTotal > 0
+    ? `<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text2);font-size:13px;font-weight:500;background:var(--bg2);border-radius:4px;margin-bottom:10px;">📥 Loading ${state._customPlaybooksLoaded} of ${state._customPlaybooksTotal} playbooks...</div>`
+    : '';
 
   if (state.activeCardView === "grid") {
     host.classList.add("cards-list-mode");
     host.innerHTML = `
+      ${loadingIndicator}
       <div class="cards-table-wrap">
         <table class="cards-table" aria-label="Playbooks list table">
           <thead>
@@ -778,7 +810,9 @@ function renderCards() {
   }
 
   host.classList.remove("cards-list-mode");
-  host.innerHTML = state.allPlaybooks.map((pb) => {
+  host.innerHTML = `
+    ${loadingIndicator}
+    ${state.allPlaybooks.map((pb) => {
     const hidden = !visibleIds.has(pb.id);
     const mitreBadges = pb.mitre.slice(0, 3).map((m) => `<span class="mitre">${esc(m)}</span>`).join("");
     const comp = computeCompleteness(pb);
@@ -800,7 +834,8 @@ function renderCards() {
         ${updatedHtml}
       </div>
     `;
-  }).join("");
+  }).join("")}
+  `;
 }
 
 function setCardView(view, btn) {
@@ -1556,6 +1591,25 @@ async function refreshData() {
   await loadCustomPlaybooks();
   await loadOverridePlaybooks();
   await loadIncidentStates();
+  
+  // Priority: If a playbook exists in custom/override, remove the static library version
+  // Match by NAME since custom and library versions have different IDs
+  const customNames = new Set();
+  for (const customPb of state.customById.values()) {
+    customNames.add(customPb.name);
+  }
+  
+  // Delete library playbooks that have custom versions
+  const libraryToDelete = [];
+  for (const [libId, libPb] of state.libraryById.entries()) {
+    if (customNames.has(libPb.name)) {
+      libraryToDelete.push(libId);
+    }
+  }
+  for (const libId of libraryToDelete) {
+    state.libraryById.delete(libId);
+  }
+  
   buildMergedPlaybooks();
   renderSidebar();
   renderCards();

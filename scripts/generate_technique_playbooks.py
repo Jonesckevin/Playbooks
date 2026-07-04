@@ -203,7 +203,7 @@ def build_playbook(tech: dict) -> dict:
         "mitreUrl":       tech["url"],
         "platforms":      tech["platforms"],
         "dataSources":    tech["dataSources"],
-        "source":         "library",
+        "source":         "library-override",
         "updated":        TODAY,
         "scenario": (
             tech["description"][:500] if tech["description"]
@@ -304,7 +304,7 @@ def main() -> int:
                     "type":           "Enterprise ATT&CK Technique",
                     "mitre":          tid,
                     "isSubtechnique": tech["isSubtechnique"],
-                    "source":         "library",
+                    "source":         "library-override",
                     "file":           f"techniques/{tactic}/{filename}",
                     "tools":          [],
                 })
