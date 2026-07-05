@@ -11,7 +11,7 @@ else
 fi
 
 # Check if the playbooks data volume is readable
-if [ -r "/playbooks" ]; then
+if [ -r "/var/www/localhost/htdocs/playbooks-custom" ]; then
   playbooks_ok="true"
 else
   playbooks_ok="false"

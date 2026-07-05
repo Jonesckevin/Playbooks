@@ -1,8 +1,8 @@
 #!/bin/sh
 # CGI: save_incident_state.sh
-# Upserts incident sidecar JSON for a playbook at /playbooks/incident-state/<id>.json
+# Upserts incident sidecar JSON for a playbook at /var/www/localhost/htdocs/incident-state/<id>.json
 
-STATE_DIR="/playbooks/incident-state"
+STATE_DIR="/var/www/localhost/htdocs/incident-state"
 . "/var/www/localhost/cgi-bin/_log.sh"
 
 # Function to send a JSON error response

@@ -1,8 +1,8 @@
 #!/bin/sh
 # CGI: load_incident_state.sh
-# Returns incident sidecar state files from /playbooks/incident-state as JSON array.
+# Returns incident sidecar state files from /var/www/localhost/htdocs/incident-state as JSON array.
 
-STATE_DIR="/playbooks/incident-state"
+STATE_DIR="/var/www/localhost/htdocs/incident-state"
 . "/var/www/localhost/cgi-bin/_log.sh"
 
 echo "Content-Type: application/json"

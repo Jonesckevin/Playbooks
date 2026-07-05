@@ -1,6 +1,6 @@
 #!/bin/sh
 # CGI: load_playbooks.sh
-# Reads all .json files from /var/www/localhost/htdocs/playbooks volume and returns them as a JSON array.
+# Reads all .json files from /var/www/localhost/htdocs/playbooks-custom volume and returns them as a JSON array.
 
 # ── Security: Restrict CORS to allowed origins ────────────────────────
 ORIGIN="${HTTP_ORIGIN:-}"
@@ -21,7 +21,7 @@ if [ -n "$ORIGIN" ]; then
     esac
 fi
 
-PLAYBOOKS_DIR="/var/www/localhost/htdocs/playbooks"
+PLAYBOOKS_DIR="/var/www/localhost/htdocs/playbooks-custom"
 . "/var/www/localhost/cgi-bin/_log.sh"
 
 echo "Content-Type: application/json"

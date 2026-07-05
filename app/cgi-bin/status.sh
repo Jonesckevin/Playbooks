@@ -2,8 +2,8 @@
 # CGI: status.sh
 # Returns runtime statistics about the application.
 
-PLAYBOOKS_DIR="/playbooks"
-INCIDENT_STATE_DIR="/playbooks/incident-state"
+PLAYBOOKS_DIR="/var/www/localhost/htdocs/playbooks-custom"
+INCIDENT_STATE_DIR="/var/www/localhost/htdocs/incident-state"
 
 echo "Content-Type: application/json"
 echo "Access-Control-Allow-Origin: *"

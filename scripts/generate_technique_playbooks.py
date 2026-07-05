@@ -294,7 +294,7 @@ def main() -> int:
                 manifest_entries.append({
                     "id":             f"tech-{tid.lower()}",
                     "num":            10000 + generated,
-                    "name":           f"{tid} – {clean(tech['name'])}",
+                    "name":           f"{tid} - {clean(tech['name'])}",
                     "cat":            "Techniques",
                     "tactic":         tactic,
                     "tacticId":       TACTIC_IDS.get(tactic, ""),

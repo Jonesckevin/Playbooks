@@ -1,8 +1,8 @@
 #!/bin/sh
 # CGI: delete_incident_state.sh
-# Deletes incident sidecar state file /playbooks/incident-state/<id>.json
+# Deletes incident sidecar state file /var/www/localhost/htdocs/incident-state/<id>.json
 
-STATE_DIR="/playbooks/incident-state"
+STATE_DIR="/var/www/localhost/htdocs/incident-state"
 . "/var/www/localhost/cgi-bin/_log.sh"
 
 # Function to send a JSON error response

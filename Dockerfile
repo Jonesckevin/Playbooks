@@ -71,7 +71,7 @@ RUN mkdir -p /var/www/localhost/htdocs/playbooks-main && \
 # ── Create empty playbooks-custom/ dir for the custom-override volume mount ────
 # Files placed here by the operator (same relative path as playbooks-main/)
 # take precedence when the frontend resolves playbook content.
-RUN mkdir -p /var/www/localhost/htdocs/playbooks
+RUN mkdir -p /var/www/localhost/htdocs/playbooks-custom
 
 COPY --from=navigator-builder /build/attack-navigator/nav-app/dist/browser/ /var/www/localhost/htdocs/attack-navigator/
 COPY app/cgi-bin/*.sh /var/www/localhost/cgi-bin/
@@ -83,6 +83,10 @@ RUN sed -i 's/\r$//' /var/www/localhost/cgi-bin/*.sh && \
 # ── Non-root user ─────────────────────────────────────────────────────────
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 RUN chown -R appuser:appgroup /var/www/localhost
+
+# ── Create incident state directory for storing playbook step checklists ──
+RUN mkdir -p /var/www/localhost/htdocs/incident-state && \
+    chown -R appuser:appgroup /var/www/localhost/htdocs/incident-state
 
 # ── Environment variables for robustness ──────────────────────────────────
 ENV PYTHONUNBUFFERED=1 \

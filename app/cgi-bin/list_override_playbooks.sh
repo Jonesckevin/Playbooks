@@ -1,6 +1,6 @@
 #!/bin/sh
 # CGI: list_override_playbooks.sh
-# Scans the /var/www/localhost/htdocs/playbooks/ directory and returns
+# Scans the /var/www/localhost/htdocs/playbooks-custom/ directory and returns
 # a list of override playbooks with metadata for frontend discovery.
 
 # ── Security: Restrict CORS to allowed origins ────────────────────────

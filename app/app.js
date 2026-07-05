@@ -1,6 +1,6 @@
 const LIBRARY_MANIFEST = "playbooks-main/manifest.json";
 const LIBRARY_MAIN_ROOT = "playbooks-main";   // built-in playbooks (baked into image)
-const LIBRARY_OVERRIDE_ROOT = "playbooks";     // custom overrides (Docker volume)
+const LIBRARY_OVERRIDE_ROOT = "playbooks-custom";     // custom overrides (Docker volume)
 const API_LOAD = "cgi-bin/load_playbooks.sh";
 const API_SAVE = "cgi-bin/save_playbook.sh";
 const API_UPDATE = "cgi-bin/update_playbook.sh";
@@ -67,6 +67,17 @@ const state = {
   _customPlaybooksLoading: false,
   _customPlaybooksTotal: 0,
   _customPlaybooksLoaded: 0,
+  // Column visibility for table view
+  tableColumns: {
+    number: true,
+    name: true,
+    category: true,
+    severity: true,
+    source: true,
+    tools: true,
+    mitre: false,
+    updated: true,
+  },
 };
 
 function toggleMobileNav() {
@@ -788,19 +799,65 @@ function renderCards() {
 
   if (state.activeCardView === "grid") {
     host.classList.add("cards-list-mode");
+    
+    // Build table headers based on column visibility
+    const headers = [];
+    if (state.tableColumns.number) headers.push("<th>#</th>");
+    if (state.tableColumns.name) headers.push("<th>Playbook</th>");
+    if (state.tableColumns.category) headers.push("<th>Category</th>");
+    if (state.tableColumns.severity) headers.push("<th>Severity</th>");
+    if (state.tableColumns.source) headers.push("<th>Source</th>");
+    if (state.tableColumns.tools) headers.push("<th>Tool coverage</th>");
+    if (state.tableColumns.mitre) headers.push("<th>MITRE</th>");
+    if (state.tableColumns.updated) headers.push("<th>Updated</th>");
+    
     host.innerHTML = `
       ${loadingIndicator}
+      <div class="cards-table-controls">
+        <button id="column-selector-btn" class="column-selector-btn" onclick="toggleColumnSelector()" title="Select visible columns">⚙️ Columns</button>
+        <div id="column-selector-menu" class="column-selector-menu">
+          <div class="column-selector-menu-content">
+            <div class="column-selector-header">Visible Columns</div>
+            <label class="column-selector-item">
+              <input type="checkbox" ${state.tableColumns.number ? "checked" : ""} onchange="toggleTableColumn('number')">
+              <span>#</span>
+            </label>
+            <label class="column-selector-item">
+              <input type="checkbox" ${state.tableColumns.name ? "checked" : ""} onchange="toggleTableColumn('name')">
+              <span>Playbook</span>
+            </label>
+            <label class="column-selector-item">
+              <input type="checkbox" ${state.tableColumns.category ? "checked" : ""} onchange="toggleTableColumn('category')">
+              <span>Category</span>
+            </label>
+            <label class="column-selector-item">
+              <input type="checkbox" ${state.tableColumns.severity ? "checked" : ""} onchange="toggleTableColumn('severity')">
+              <span>Severity</span>
+            </label>
+            <label class="column-selector-item">
+              <input type="checkbox" ${state.tableColumns.source ? "checked" : ""} onchange="toggleTableColumn('source')">
+              <span>Source</span>
+            </label>
+            <label class="column-selector-item">
+              <input type="checkbox" ${state.tableColumns.tools ? "checked" : ""} onchange="toggleTableColumn('tools')">
+              <span>Tool coverage</span>
+            </label>
+            <label class="column-selector-item">
+              <input type="checkbox" ${state.tableColumns.mitre ? "checked" : ""} onchange="toggleTableColumn('mitre')">
+              <span>MITRE</span>
+            </label>
+            <label class="column-selector-item">
+              <input type="checkbox" ${state.tableColumns.updated ? "checked" : ""} onchange="toggleTableColumn('updated')">
+              <span>Updated</span>
+            </label>
+          </div>
+        </div>
+      </div>
       <div class="cards-table-wrap">
         <table class="cards-table" aria-label="Playbooks list table">
           <thead>
             <tr>
-              <th>#</th>
-              <th>Playbook</th>
-              <th>Category</th>
-              <th>Severity</th>
-              <th>Source</th>
-              <th>Tool coverage</th>
-              <th>Updated</th>
+              ${headers.join("")}
             </tr>
           </thead>
           <tbody>
@@ -811,17 +868,20 @@ function renderCards() {
                 `<span class="tool-pip tool-pip-${t} ${comp[t] ? 'pip-on' : 'pip-off'}" title="${TOOL_LABELS[t] || t}"></span>`
               ).join('')}</div>`;
               const sourceLabel = pb.source === "custom" ? "Custom" : pb.source === "library-override" ? "Override" : "Library";
+              
+              let cells = "";
+              if (state.tableColumns.number) cells += `<td class="cards-table-num">#${idx + 1}</td>`;
+              if (state.tableColumns.name) cells += `<td><div class="cards-table-name">${esc(pb.name)}</div></td>`;
+              if (state.tableColumns.category) cells += `<td><span class="badge b-gray">${esc(pb.cat)}</span></td>`;
+              if (state.tableColumns.severity) cells += `<td><span class="badge ${sevBadgeClass(pb.sev)}">${humanSev(pb.sev)}</span></td>`;
+              if (state.tableColumns.source) cells += `<td><span class="badge ${pb.source === "custom" ? "b-purple" : pb.source === "library-override" ? "b-amber" : "b-blue"}">${sourceLabel}</span></td>`;
+              if (state.tableColumns.tools) cells += `<td>${pipsHtml}</td>`;
+              if (state.tableColumns.mitre) cells += `<td><div style="display:flex;flex-wrap:wrap;gap:3px">${mitreBadges}</div></td>`;
+              if (state.tableColumns.updated) cells += `<td>${pb.updated ? `<span class="cards-table-updated">${esc(pb.updated)}</span>` : '<span class="cards-table-empty">-</span>'}</td>`;
+              
               return `
                 <tr class="cards-table-row" tabindex="0" onclick="openPlaybook('${esc(pb.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPlaybook('${esc(pb.id)}');}">
-                  <td class="cards-table-num">#${idx + 1}</td>
-                  <td>
-                    <div class="cards-table-name">${esc(pb.name)}</div>
-                  </td>
-                  <td><span class="badge b-gray">${esc(pb.cat)}</span></td>
-                  <td><span class="badge ${sevBadgeClass(pb.sev)}">${humanSev(pb.sev)}</span></td>
-                  <td><span class="badge ${pb.source === "custom" ? "b-purple" : pb.source === "library-override" ? "b-amber" : "b-blue"}">${sourceLabel}</span></td>
-                  <td>${pipsHtml}</td>
-                  <td>${pb.updated ? `<span class="cards-table-updated">${esc(pb.updated)}</span>` : '<span class="cards-table-empty">-</span>'}</td>
+                  ${cells}
                 </tr>
               `;
             }).join("")}
@@ -874,6 +934,59 @@ function setCardView(view, btn) {
     if (target) target.classList.add("on");
   }
   renderCards();
+}
+
+// Load table column visibility preferences from localStorage
+function loadTableColumnPreferences() {
+  const saved = localStorage.getItem("pb-table-columns");
+  if (saved) {
+    try {
+      const prefs = JSON.parse(saved);
+      state.tableColumns = { ...state.tableColumns, ...prefs };
+    } catch (e) {
+      console.warn("Failed to parse table column preferences:", e);
+    }
+  }
+}
+
+// Save table column visibility preferences to localStorage
+function saveTableColumnPreferences() {
+  localStorage.setItem("pb-table-columns", JSON.stringify(state.tableColumns));
+}
+
+// Toggle a table column's visibility
+function toggleTableColumn(columnKey) {
+  if (columnKey in state.tableColumns) {
+    state.tableColumns[columnKey] = !state.tableColumns[columnKey];
+    saveTableColumnPreferences();
+    renderCards();
+  }
+}
+
+// Open/close the column selector menu
+function toggleColumnSelector() {
+  const menu = document.getElementById("column-selector-menu");
+  if (menu) {
+    menu.classList.toggle("visible");
+    // Close if clicking outside
+    if (menu.classList.contains("visible")) {
+      setTimeout(() => {
+        document.addEventListener("click", closeColumnSelectorOnClickOutside);
+      }, 0);
+    } else {
+      document.removeEventListener("click", closeColumnSelectorOnClickOutside);
+    }
+  }
+}
+
+// Close column selector when clicking outside
+function closeColumnSelectorOnClickOutside(e) {
+  const menu = document.getElementById("column-selector-menu");
+  const btn = document.getElementById("column-selector-btn");
+  if (menu && !menu.contains(e.target) && !btn?.contains(e.target)) {
+    menu.classList.remove("visible");
+    document.removeEventListener("click", closeColumnSelectorOnClickOutside);
+  }
 }
 
 function normalizeIncidentState(value) {
@@ -1674,6 +1787,8 @@ async function init() {
     await loadManifest();
     initLibraryStubs();    // instant - no HTTP, builds stubs from manifest
     await refreshData();  // loads custom overrides + builds merged state
+    
+    loadTableColumnPreferences();  // load user's column visibility preferences
 
     const savedCardView = localStorage.getItem("pb-card-view");
     if (savedCardView === "table") {

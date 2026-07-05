@@ -1,9 +1,9 @@
 #!/bin/sh
 # CGI: delete_playbook.sh
 # Expects DELETE request with ?id=<uuid> query string.
-# Removes the matching /playbooks/<uuid>.json file.
+# Removes the matching /var/www/localhost/htdocs/playbooks-custom/<uuid>.json file.
 
-PLAYBOOKS_DIR="/playbooks"
+PLAYBOOKS_DIR="/var/www/localhost/htdocs/playbooks-custom"
 OVERRIDE_DIR="${PLAYBOOKS_DIR}/library-overrides"
 . "/var/www/localhost/cgi-bin/_log.sh"
 

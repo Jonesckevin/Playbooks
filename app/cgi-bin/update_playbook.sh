@@ -1,10 +1,10 @@
 #!/bin/sh
 # CGI: update_playbook.sh
 # Updates an existing playbook.
-# - If custom exists (/playbooks/<id>.json), overwrite it.
-# - Else write library override to /playbooks/library-overrides/<id>.json.
+# - If custom exists (/var/www/localhost/htdocs/playbooks-custom/<id>.json), overwrite it.
+# - Else write library override to /var/www/localhost/htdocs/playbooks-custom/library-overrides/<id>.json.
 
-PLAYBOOKS_DIR="/playbooks"
+PLAYBOOKS_DIR="/var/www/localhost/htdocs/playbooks-custom"
 OVERRIDE_DIR="${PLAYBOOKS_DIR}/library-overrides"
 . "/var/www/localhost/cgi-bin/_log.sh"
 

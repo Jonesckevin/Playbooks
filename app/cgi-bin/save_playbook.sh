@@ -1,9 +1,9 @@
 #!/bin/sh
 # CGI: save_playbook.sh
 # Reads a JSON POST body, validates required fields,
-# writes it to /playbooks/<uuid>.json on the Docker volume.
+# writes it to /var/www/localhost/htdocs/playbooks-custom/<uuid>.json on the Docker volume.
 
-PLAYBOOKS_DIR="/playbooks"
+PLAYBOOKS_DIR="/var/www/localhost/htdocs/playbooks-custom"
 . "/var/www/localhost/cgi-bin/_log.sh"
 
 # Function to send a JSON error response
