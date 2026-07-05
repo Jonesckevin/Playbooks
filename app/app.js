@@ -47,6 +47,7 @@ const state = {
   selectedId: null,
   activeCardFilter: "all",
   activeCardSearch: "",
+  advancedSearchEnabled: false,
   activeCardView: "grid",
   editingId: null,
   mitreTags: [],
@@ -745,7 +746,31 @@ function renderCards() {
 
   const search = state.activeCardSearch.trim().toLowerCase();
   const visible = state.allPlaybooks.filter((pb) => {
-    const haystack = [pb.name, pb.cat, pb.type, pb.mitre.join(" ")].join(" ").toLowerCase();
+    let haystack;
+    if (state.advancedSearchEnabled) {
+      // Deep search: include all fields
+      const allQueryText = pb.queries ? Object.values(pb.queries).filter(v => v).join(" ") : "";
+      const allAnalysisText = pb.investigation && pb.investigation.detectionAnalysis
+        ? pb.investigation.detectionAnalysis.map(a => {
+            const analysisQueries = a.queries ? Object.values(a.queries).filter(v => v).join(" ") : "";
+            return [a.title, a.detail, analysisQueries].filter(v => v).join(" ");
+          }).join(" ")
+        : "";
+      haystack = [
+        pb.name,
+        pb.cat,
+        pb.type,
+        pb.scenario || "",
+        pb.detail || "",
+        pb.detection || "",
+        pb.mitre.join(" "),
+        allQueryText,
+        allAnalysisText
+      ].join(" ").toLowerCase();
+    } else {
+      // Basic search: name, category, type, MITRE only
+      haystack = [pb.name, pb.cat, pb.type, pb.mitre.join(" ")].join(" ").toLowerCase();
+    }
     const catOk    = state.activeCardFilter === "all" || pb.cat === state.activeCardFilter;
     const sevOk    = state.activeCardSevFilter === "all" || pb.sev === state.activeCardSevFilter;
     const sourceOk = state.activeSourceFilter === "all" ||
@@ -774,13 +799,12 @@ function renderCards() {
               <th>Category</th>
               <th>Severity</th>
               <th>Source</th>
-              <th>MITRE</th>
               <th>Tool coverage</th>
               <th>Updated</th>
             </tr>
           </thead>
           <tbody>
-            ${visible.map((pb) => {
+            ${visible.map((pb, idx) => {
               const mitreBadges = pb.mitre.slice(0, 4).map((m) => `<span class="mitre">${esc(m)}</span>`).join("");
               const comp = computeCompleteness(pb);
               const pipsHtml = `<div class="card-completeness card-completeness-table">${state.activeTools.map((t) =>
@@ -789,14 +813,13 @@ function renderCards() {
               const sourceLabel = pb.source === "custom" ? "Custom" : pb.source === "library-override" ? "Override" : "Library";
               return `
                 <tr class="cards-table-row" tabindex="0" onclick="openPlaybook('${esc(pb.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openPlaybook('${esc(pb.id)}');}">
-                  <td class="cards-table-num">#${pb.num || "-"}</td>
+                  <td class="cards-table-num">#${idx + 1}</td>
                   <td>
                     <div class="cards-table-name">${esc(pb.name)}</div>
                   </td>
                   <td><span class="badge b-gray">${esc(pb.cat)}</span></td>
                   <td><span class="badge ${sevBadgeClass(pb.sev)}">${humanSev(pb.sev)}</span></td>
                   <td><span class="badge ${pb.source === "custom" ? "b-purple" : pb.source === "library-override" ? "b-amber" : "b-blue"}">${sourceLabel}</span></td>
-                  <td>${mitreBadges || '<span class="cards-table-empty">-</span>'}</td>
                   <td>${pipsHtml}</td>
                   <td>${pb.updated ? `<span class="cards-table-updated">${esc(pb.updated)}</span>` : '<span class="cards-table-empty">-</span>'}</td>
                 </tr>
@@ -814,6 +837,8 @@ function renderCards() {
     ${loadingIndicator}
     ${state.allPlaybooks.map((pb) => {
     const hidden = !visibleIds.has(pb.id);
+    const visibleIndex = hidden ? -1 : Array.from(visibleIds).indexOf(pb.id);
+    const displayNum = hidden ? "-" : (visible.findIndex(v => v.id === pb.id) + 1);
     const mitreBadges = pb.mitre.slice(0, 3).map((m) => `<span class="mitre">${esc(m)}</span>`).join("");
     const comp = computeCompleteness(pb);
     const pipsHtml = `<div class="card-completeness">${state.activeTools.map(t =>
@@ -822,7 +847,7 @@ function renderCards() {
     const updatedHtml = pb.updated ? `<div class="card-updated">Updated ${pb.updated}</div>` : '';
     return `
       <div class="card ${hidden ? "hidden" : ""}" data-cat="${esc(pb.cat)}" onclick="openPlaybook('${esc(pb.id)}')">
-        <div class="card-num">#${pb.num || "-"}</div>
+        <div class="card-num">#${displayNum}</div>
         <div class="card-name">${esc(pb.name)}</div>
         <div class="card-badges">
           <span class="badge ${sevBadgeClass(pb.sev)}">${humanSev(pb.sev)}</span>
@@ -1663,6 +1688,16 @@ async function init() {
     if (cardSearch) {
       cardSearch.addEventListener("input", (e) => {
         state.activeCardSearch = e.target.value || "";
+        renderCards();
+      });
+    }
+
+    const advancedToggle = document.getElementById("advanced-search-toggle");
+    if (advancedToggle) {
+      advancedToggle.addEventListener("click", (e) => {
+        e.preventDefault();
+        state.advancedSearchEnabled = !state.advancedSearchEnabled;
+        advancedToggle.classList.toggle("active", state.advancedSearchEnabled);
         renderCards();
       });
     }

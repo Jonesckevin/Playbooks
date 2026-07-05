@@ -137,9 +137,12 @@ body{font-family:var(--sans);background:var(--bg2);color:var(--text);line-height
 .ph-su{font-size:13px;color:var(--text2);margin-top:3px}
 .ph-me{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
 .filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.1rem;align-items:center}
-.cards-search-wrap{margin-bottom:.8rem}
-.cards-search{width:100%;max-width:640px;font-size:13px;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);outline:none}
+.cards-search-wrap{margin-bottom:.8rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cards-search{flex:1;min-width:200px;font-size:13px;padding:8px 10px;border:1px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);outline:none}
 .cards-search:focus{border-color:var(--blue-t);box-shadow:var(--focus-ring)}
+.advanced-search-toggle{font-size:12px;padding:6px 12px;border-radius:4px;border:1px solid var(--border);background:var(--bg2);color:var(--text2);cursor:pointer;transition:all .15s;white-space:nowrap}
+.advanced-search-toggle:hover{background:var(--bg3);color:var(--text);border-color:var(--border2)}
+.advanced-search-toggle.active{background:var(--blue-t);color:white;border-color:var(--blue-t);font-weight:600}
 .filter-btn{font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid var(--border);cursor:pointer;background:var(--bg);color:var(--text2);transition:all .1s}
 .filter-btn:hover{background:var(--bg2);color:var(--text);border-color:var(--border2)}
 .filter-btn.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
@@ -331,7 +334,7 @@ details[open]>.step-query-summary{border-bottom:1px solid var(--border)}
   body.nav-open .mobile-nav-backdrop{display:block}
   body.nav-open .sidebar{transform:translateX(0)}
 }
-@media(max-width:680px){.form-grid{grid-template-columns:1fr}.cards-search{max-width:none}}
+@media(max-width:680px){.form-grid{grid-template-columns:1fr}.cards-search-wrap{flex-direction:column}.cards-search{min-width:auto}.advanced-search-toggle{align-self:flex-start}}
 @media(max-width:900px){.navigator-controls{grid-template-columns:1fr}.navigator-embed{height:64vh;min-height:460px}}
 
 .step-d{font-size:12px;color:var(--text2);margin-top:4px;line-height:1.55}
