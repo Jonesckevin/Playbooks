@@ -3,7 +3,7 @@
 
 Fetches the Enterprise ATT&CK STIX bundle at Docker build time.
 Produces one playbook per technique with STIX metadata and empty detection stubs.
-No hardcoded queries - add detection content via custom override files in app/playbooks/.
+No hardcoded queries - add detection content via custom override files in app/playbooks-custom/.
 
 Also generates app/playbooks-main/mitre-index.json (slim technique lookup for the navigator).
 
@@ -177,7 +177,7 @@ def build_playbook(tech: dict) -> dict:
     """Produce a minimal playbook JSON for a single technique.
 
     Detection content is intentionally empty - add via custom override files
-    in app/playbooks/ mirroring the playbooks-main/ structure.
+    in app/playbooks-custom/ mirroring the playbooks-main/ structure.
     """
     tid    = tech["id"]
     name   = tech["name"]

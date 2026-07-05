@@ -601,7 +601,7 @@ async function loadCustomPlaybooks() {
   state._customPlaybooksLoading = false;
 }
 
-// Discover playbooks in the override volume (app/playbooks/) at runtime
+// Discover playbooks in the override volume (app/playbooks-custom/) at runtime
 async function loadOverridePlaybooks() {
   try {
     const overrideList = await fetchJson("cgi-bin/list_override_playbooks.sh").catch(() => []);

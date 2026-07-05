@@ -68,7 +68,7 @@ RUN mkdir -p /var/www/localhost/htdocs/playbooks-main && \
     cp -r /tmp/build/app/playbooks-main/. /var/www/localhost/htdocs/playbooks-main/ && \
     rm -rf /tmp/build
 
-# ── Create empty playbooks/ dir for the custom-override volume mount ──────
+# ── Create empty playbooks-custom/ dir for the custom-override volume mount ────
 # Files placed here by the operator (same relative path as playbooks-main/)
 # take precedence when the frontend resolves playbook content.
 RUN mkdir -p /var/www/localhost/htdocs/playbooks

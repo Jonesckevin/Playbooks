@@ -34,8 +34,8 @@ services:
     
     volumes:
       # Custom-override playbooks: place files here mirroring playbooks-main/ structure.
-      # A file at app/playbooks/malware/pb01-ransomware-infection.json overrides the built-in.
-      - ./app/playbooks:/var/www/localhost/htdocs/playbooks
+      # A file at app/playbooks-custom/malware/pb01-ransomware-infection.json overrides the built-in.
+      - ./app/playbooks-custom:/var/www/localhost/htdocs/playbooks
       #- ./app/playbooks-main:/var/www/localhost/htdocs/playbooks-main
     environment:
       # ── Active SIEM/tool tabs (exactly 6 shown) ───────────────────────────
